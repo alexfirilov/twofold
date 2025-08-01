@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { isAuthenticated } from '@/lib/auth'
-import { getAllMedia } from '@/lib/db'
-import MediaGallery from './(gallery)/components/MediaGallery'
+import { getAllMemoryGroups } from '@/lib/db'
+import EnhancedMediaGallery from './(gallery)/components/EnhancedMediaGallery'
 
 export default async function HomePage() {
   const authenticated = await isAuthenticated()
@@ -10,8 +10,8 @@ export default async function HomePage() {
     redirect('/login')
   }
 
-  // Fetch media items for the gallery
-  const mediaItems = await getAllMedia()
+  // Fetch memory groups for the gallery (exclude locked ones for main view)
+  const memoryGroups = await getAllMemoryGroups(true, false)
 
-  return <MediaGallery mediaItems={mediaItems} />
+  return <EnhancedMediaGallery memoryGroups={memoryGroups} />
 }

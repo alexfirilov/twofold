@@ -116,4 +116,43 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  /* Memory Groups Grid Layouts */
+  .memory-groups-grid.gallery {
+    @apply grid gap-6;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+
+  .memory-groups-grid.icons {
+    @apply grid gap-4;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+
+  .memory-groups-grid.list {
+    @apply space-y-0 border border-accent/20 rounded-lg overflow-hidden bg-white/50;
+  }
+
+  .memory-groups-grid.columns {
+    @apply grid gap-4;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+
+  .memory-groups-grid.timeline {
+    @apply space-y-4;
+  }
+
+  /* Mobile responsive adjustments */
+  @media (max-width: 640px) {
+    .memory-groups-grid.gallery {
+      grid-template-columns: 1fr;
+    }
+    
+    .memory-groups-grid.icons {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .memory-groups-grid.columns {
+      grid-template-columns: 1fr;
+    }
+  }
 }

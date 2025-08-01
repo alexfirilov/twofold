@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { isAuthenticated } from '@/lib/auth'
-import { getAllMedia } from '@/lib/db'
-import AdminDashboard from './components/AdminDashboard'
+import { getAllMemoryGroups } from '@/lib/db'
+import EnhancedAdminDashboard from './components/EnhancedAdminDashboard'
 
 export default async function AdminPage() {
   const authenticated = await isAuthenticated()
@@ -10,8 +10,8 @@ export default async function AdminPage() {
     redirect('/login')
   }
 
-  // Fetch media items for the admin view
-  const mediaItems = await getAllMedia()
+  // Fetch memory groups for the admin view (include locked ones)
+  const memoryGroups = await getAllMemoryGroups(true, true)
 
-  return <AdminDashboard mediaItems={mediaItems} />
+  return <EnhancedAdminDashboard memoryGroups={memoryGroups} />
 }
