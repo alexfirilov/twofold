@@ -21,6 +21,15 @@ export interface MemoryGroup {
   updated_at: Date
   media_items?: MediaItem[]
   media_count?: number
+  // Advanced locking features
+  lock_visibility?: 'public' | 'private'
+  show_date_hint?: boolean
+  show_image_preview?: boolean
+  blur_percentage?: number
+  unlock_hint?: string
+  unlock_task?: string
+  unlock_type?: 'scheduled' | 'task_based'
+  task_completed?: boolean
 }
 
 export interface CreateMemoryGroup {
@@ -28,6 +37,15 @@ export interface CreateMemoryGroup {
   description?: string
   is_locked?: boolean
   unlock_date?: Date
+  // Advanced locking features
+  lock_visibility?: 'public' | 'private'
+  show_date_hint?: boolean
+  show_image_preview?: boolean
+  blur_percentage?: number
+  unlock_hint?: string
+  unlock_task?: string
+  unlock_type?: 'scheduled' | 'task_based'
+  task_completed?: boolean
 }
 
 export interface UpdateMemoryGroup {
@@ -36,6 +54,15 @@ export interface UpdateMemoryGroup {
   is_locked?: boolean
   unlock_date?: Date
   cover_media_id?: string
+  // Advanced locking features
+  lock_visibility?: 'public' | 'private'
+  show_date_hint?: boolean
+  show_image_preview?: boolean
+  blur_percentage?: number
+  unlock_hint?: string
+  unlock_task?: string
+  unlock_type?: 'scheduled' | 'task_based'
+  task_completed?: boolean
 }
 
 // Types for media items
@@ -127,14 +154,26 @@ export async function query(text: string, params?: any[]): Promise<any> {
 export async function createMemoryGroup(groupData: CreateMemoryGroup): Promise<MemoryGroup> {
   try {
     const result = await query(`
-      INSERT INTO memory_groups (title, description, is_locked, unlock_date)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO memory_groups (
+        title, description, is_locked, unlock_date,
+        lock_visibility, show_date_hint, show_image_preview, blur_percentage,
+        unlock_hint, unlock_task, unlock_type, task_completed
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       groupData.title,
       groupData.description,
       groupData.is_locked || false,
-      groupData.unlock_date
+      groupData.unlock_date,
+      groupData.lock_visibility || 'private',
+      groupData.show_date_hint || false,
+      groupData.show_image_preview || false,
+      groupData.blur_percentage || 80,
+      groupData.unlock_hint,
+      groupData.unlock_task,
+      groupData.unlock_type || 'scheduled',
+      groupData.task_completed || false
     ])
     
     return result.rows[0]
@@ -149,7 +188,12 @@ export async function createMemoryGroup(groupData: CreateMemoryGroup): Promise<M
  */
 export async function getAllMemoryGroups(includeMedia = true, includeLocked = false): Promise<MemoryGroup[]> {
   try {
-    const lockFilter = includeLocked ? '' : 'WHERE mg.is_locked = FALSE OR (mg.unlock_date IS NOT NULL AND mg.unlock_date <= NOW())'
+    // Updated filter to handle new visibility options
+    const lockFilter = includeLocked 
+      ? '' 
+      : `WHERE (mg.is_locked = FALSE) 
+         OR (mg.is_locked = TRUE AND mg.lock_visibility = 'public')
+         OR (mg.unlock_date IS NOT NULL AND mg.unlock_date <= NOW())`
     
     if (includeMedia) {
       const result = await query(`
@@ -283,6 +327,55 @@ export async function updateMemoryGroup(id: string, updates: UpdateMemoryGroup):
     if (updates.cover_media_id !== undefined) {
       setParts.push(`cover_media_id = $${paramCount}`)
       values.push(updates.cover_media_id)
+      paramCount++
+    }
+
+    // Advanced locking features
+    if (updates.lock_visibility !== undefined) {
+      setParts.push(`lock_visibility = $${paramCount}`)
+      values.push(updates.lock_visibility)
+      paramCount++
+    }
+
+    if (updates.show_date_hint !== undefined) {
+      setParts.push(`show_date_hint = $${paramCount}`)
+      values.push(updates.show_date_hint)
+      paramCount++
+    }
+
+    if (updates.show_image_preview !== undefined) {
+      setParts.push(`show_image_preview = $${paramCount}`)
+      values.push(updates.show_image_preview)
+      paramCount++
+    }
+
+    if (updates.blur_percentage !== undefined) {
+      setParts.push(`blur_percentage = $${paramCount}`)
+      values.push(updates.blur_percentage)
+      paramCount++
+    }
+
+    if (updates.unlock_hint !== undefined) {
+      setParts.push(`unlock_hint = $${paramCount}`)
+      values.push(updates.unlock_hint)
+      paramCount++
+    }
+
+    if (updates.unlock_task !== undefined) {
+      setParts.push(`unlock_task = $${paramCount}`)
+      values.push(updates.unlock_task)
+      paramCount++
+    }
+
+    if (updates.unlock_type !== undefined) {
+      setParts.push(`unlock_type = $${paramCount}`)
+      values.push(updates.unlock_type)
+      paramCount++
+    }
+
+    if (updates.task_completed !== undefined) {
+      setParts.push(`task_completed = $${paramCount}`)
+      values.push(updates.task_completed)
       paramCount++
     }
 

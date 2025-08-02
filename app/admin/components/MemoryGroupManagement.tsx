@@ -254,9 +254,10 @@ export default function MemoryGroupManagement({ memoryGroups }: MemoryGroupManag
                       </div>
 
                       {group.description && (
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {group.description}
-                        </p>
+                        <div 
+                          className="text-sm text-muted-foreground mb-3 line-clamp-2 prose prose-sm"
+                          dangerouslySetInnerHTML={{ __html: group.description }}
+                        />
                       )}
 
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">

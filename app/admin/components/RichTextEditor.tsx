@@ -2,6 +2,10 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
+import TextStyle from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
+import FontFamily from '@tiptap/extension-font-family'
 import { Button } from '@/components/ui/button'
 import { 
   Bold, 
@@ -11,8 +15,19 @@ import {
   Quote,
   Undo,
   Redo,
-  Heart
+  Heart,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Palette,
+  Type
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface RichTextEditorProps {
   value: string
@@ -27,6 +42,14 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
         heading: {
           levels: [2, 3]
         }
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      TextStyle,
+      Color,
+      FontFamily.configure({
+        types: ['textStyle'],
       })
     ],
     content: value,
@@ -55,6 +78,51 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
     <div className="border border-accent/30 rounded-lg bg-white/50 overflow-hidden">
       {/* Toolbar */}
       <div className="border-b border-accent/20 p-2 flex flex-wrap gap-1 bg-white/80">
+        {/* Font Family */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              title="Font Family"
+            >
+              <Type className="h-4 w-4 mr-1" />
+              Font
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-white border shadow-lg">
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Inter, ui-sans-serif, system-ui, sans-serif').run()}>
+              Default
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Georgia, serif').run()}>
+              Georgia
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Times New Roman, serif').run()}>
+              Times New Roman
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Arial, sans-serif').run()}>
+              Arial
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Courier New, monospace').run()}>
+              Courier New
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Dancing Script, cursive').run()}>
+              Dancing Script
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Amiri, serif').run()}>
+              Amiri (Arabic)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => editor.chain().focus().setFontFamily('Noto Sans Hebrew, sans-serif').run()}>
+              Noto Sans Hebrew
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="w-px h-6 bg-accent/30 mx-1" />
+
+        {/* Text Formatting */}
         <Button
           type="button"
           variant="ghost"
@@ -77,8 +145,78 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           <Italic className="h-4 w-4" />
         </Button>
 
+        {/* Color Picker */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="Text Color"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-white border shadow-lg">
+            <div className="grid grid-cols-6 gap-1 p-2">
+              {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF',
+                '#00FFFF', '#FFA500', '#800080', '#FFC0CB', '#A52A2A', '#808080'].map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color }}
+                  onClick={() => editor.chain().focus().setColor(color).run()}
+                  title={color}
+                />
+              ))}
+            </div>
+            <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()}>
+              Remove Color
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <div className="w-px h-6 bg-accent/30 mx-1" />
 
+        {/* Text Alignment */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().setTextAlign('left').run()}
+          className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: 'left' }) ? 'bg-primary/20 text-primary' : ''}`}
+          title="Align Left"
+        >
+          <AlignLeft className="h-4 w-4" />
+        </Button>
+        
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().setTextAlign('center').run()}
+          className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: 'center' }) ? 'bg-primary/20 text-primary' : ''}`}
+          title="Align Center"
+        >
+          <AlignCenter className="h-4 w-4" />
+        </Button>
+        
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().setTextAlign('right').run()}
+          className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: 'right' }) ? 'bg-primary/20 text-primary' : ''}`}
+          title="Align Right"
+        >
+          <AlignRight className="h-4 w-4" />
+        </Button>
+
+        <div className="w-px h-6 bg-accent/30 mx-1" />
+
+        {/* Lists and Quote */}
         <Button
           type="button"
           variant="ghost"
@@ -114,6 +252,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
 
         <div className="w-px h-6 bg-accent/30 mx-1" />
 
+        {/* Undo/Redo */}
         <Button
           type="button"
           variant="ghost"
@@ -136,6 +275,24 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
           title="Redo"
         >
           <Redo className="h-4 w-4" />
+        </Button>
+
+        <div className="w-px h-6 bg-accent/30 mx-1" />
+
+        {/* RTL/LTR Toggle */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const currentDir = editor.getAttributes('paragraph').dir || 'ltr'
+            const newDir = currentDir === 'ltr' ? 'rtl' : 'ltr'
+            editor.chain().focus().updateAttributes('paragraph', { dir: newDir }).run()
+          }}
+          className="h-8 px-2"
+          title="Toggle Text Direction (RTL/LTR)"
+        >
+          RTL
         </Button>
       </div>
 

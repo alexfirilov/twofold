@@ -19,7 +19,9 @@ import {
   FolderPlus,
   Lock,
   Unlock,
-  Clock
+  Clock,
+  Settings,
+  CheckSquare
 } from 'lucide-react'
 import RichTextEditor from './RichTextEditor'
 
@@ -42,6 +44,15 @@ export default function EnhancedUploadForm() {
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  
+  // Advanced locking features
+  const [lockVisibility, setLockVisibility] = useState<'public' | 'private'>('private')
+  const [showDateHint, setShowDateHint] = useState(false)
+  const [showImagePreview, setShowImagePreview] = useState(false)
+  const [blurPercentage, setBlurPercentage] = useState(80)
+  const [unlockHint, setUnlockHint] = useState('')
+  const [unlockTask, setUnlockTask] = useState('')
+  const [unlockType, setUnlockType] = useState<'scheduled' | 'task_based'>('scheduled')
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -86,7 +97,15 @@ export default function EnhancedUploadForm() {
         is_locked: isLocked,
         unlock_date: (unlockDate && unlockTime) 
           ? new Date(`${unlockDate}T${unlockTime}`) 
-          : undefined
+          : undefined,
+        // Advanced locking features
+        lock_visibility: lockVisibility,
+        show_date_hint: showDateHint,
+        show_image_preview: showImagePreview,
+        blur_percentage: blurPercentage,
+        unlock_hint: unlockHint || undefined,
+        unlock_task: unlockTask || undefined,
+        unlock_type: unlockType
       }
 
       const groupResponse = await fetch('/api/memory-groups', {
@@ -196,6 +215,14 @@ export default function EnhancedUploadForm() {
       setUnlockTime('')
       setSelectedFiles([])
       setUploadProgress({})
+      // Reset advanced locking fields
+      setLockVisibility('private')
+      setShowDateHint(false)
+      setShowImagePreview(false)
+      setBlurPercentage(80)
+      setUnlockHint('')
+      setUnlockTask('')
+      setUnlockType('scheduled')
       
       // Refresh the page
       router.refresh()
@@ -315,6 +342,144 @@ export default function EnhancedUploadForm() {
                 <p className="text-sm text-muted-foreground">
                   This memory will automatically unlock on {new Date(`${unlockDate}T${unlockTime}`).toLocaleString()}
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* Advanced Locking Options */}
+          {isLocked && (
+            <div className="p-4 bg-accent/5 rounded-lg space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Settings className="h-4 w-4" />
+                Advanced Locking Options
+              </div>
+
+              {/* Lock Visibility */}
+              <div className="space-y-2">
+                <Label>Visibility When Locked</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={lockVisibility === 'private' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setLockVisibility('private')}
+                  >
+                    Private (Hidden)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={lockVisibility === 'public' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setLockVisibility('public')}
+                  >
+                    Public (Visible but Locked)
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {lockVisibility === 'private' 
+                    ? 'Memory will be completely hidden from users until unlocked'
+                    : 'Memory will be visible to users but appear as locked with customizable hints'
+                  }
+                </p>
+              </div>
+
+              {/* Unlock Type */}
+              <div className="space-y-2">
+                <Label>Unlock Method</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={unlockType === 'scheduled' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setUnlockType('scheduled')}
+                  >
+                    <Clock className="h-4 w-4 mr-1" />
+                    Scheduled
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={unlockType === 'task_based' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setUnlockType('task_based')}
+                  >
+                    <CheckSquare className="h-4 w-4 mr-1" />
+                    Task-Based
+                  </Button>
+                </div>
+              </div>
+
+              {/* Task-Based Unlock Options */}
+              {unlockType === 'task_based' && (
+                <div className="space-y-2">
+                  <Label htmlFor="unlock-task">Task Description</Label>
+                  <textarea
+                    id="unlock-task"
+                    placeholder="Describe the task that needs to be completed to unlock this memory..."
+                    value={unlockTask}
+                    onChange={(e) => setUnlockTask(e.target.value)}
+                    className="w-full p-2 border border-accent/30 rounded-lg bg-white/50 min-h-[80px] font-body text-sm"
+                  />
+                </div>
+              )}
+
+              {/* Public Lock Options */}
+              {lockVisibility === 'public' && (
+                <div className="space-y-4 border-t border-accent/20 pt-4">
+                  <div className="text-sm font-medium">Public Lock Hints</div>
+                  
+                  {/* Date Hint */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="show-date-hint"
+                      checked={showDateHint}
+                      onChange={(e) => setShowDateHint(e.target.checked)}
+                      className="rounded"
+                    />
+                    <Label htmlFor="show-date-hint" className="text-sm">Show date when memory was created</Label>
+                  </div>
+
+                  {/* Image Preview */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="show-image-preview"
+                        checked={showImagePreview}
+                        onChange={(e) => setShowImagePreview(e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="show-image-preview" className="text-sm">Show blurred preview image</Label>
+                    </div>
+                    
+                    {showImagePreview && (
+                      <div className="ml-6 space-y-2">
+                        <Label htmlFor="blur-percentage" className="text-sm">Blur intensity: {blurPercentage}%</Label>
+                        <input
+                          type="range"
+                          id="blur-percentage"
+                          min="20"
+                          max="100"
+                          value={blurPercentage}
+                          onChange={(e) => setBlurPercentage(Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Unlock Hint */}
+                  <div className="space-y-2">
+                    <Label htmlFor="unlock-hint">Hint Text (Optional)</Label>
+                    <Input
+                      id="unlock-hint"
+                      placeholder="e.g., 'A special surprise awaits...'"
+                      value={unlockHint}
+                      onChange={(e) => setUnlockHint(e.target.value)}
+                      className="romantic-input"
+                    />
+                  </div>
+                </div>
               )}
             </div>
           )}

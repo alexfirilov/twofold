@@ -21,17 +21,19 @@ import {
   Lock,
   Unlock,
   Clock,
-  FolderPlus
+  FolderPlus,
+  CheckSquare
 } from 'lucide-react'
 import EnhancedUploadForm from './EnhancedUploadForm'
 import MemoryGroupManagement from './MemoryGroupManagement'
 import LockingControls from './LockingControls'
+import TaskManagement from './TaskManagement'
 
 interface EnhancedAdminDashboardProps {
   memoryGroups: MemoryGroup[]
 }
 
-type ActiveTab = 'upload' | 'manage' | 'locking' | 'analytics'
+type ActiveTab = 'upload' | 'manage' | 'locking' | 'tasks' | 'analytics'
 
 export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('upload')
@@ -92,6 +94,12 @@ export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDa
       label: 'Lock Control',
       icon: Lock,
       description: 'Manage visibility & scheduling'
+    },
+    {
+      id: 'tasks' as ActiveTab,
+      label: 'Task Management',
+      icon: CheckSquare,
+      description: 'Complete tasks & unlock memories'
     },
     {
       id: 'analytics' as ActiveTab,
@@ -256,6 +264,18 @@ export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDa
                 </p>
               </div>
               <LockingControls memoryGroups={memoryGroups} />
+            </div>
+          )}
+
+          {activeTab === 'tasks' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-xl font-romantic text-primary mb-2">Task Management</h2>
+                <p className="text-muted-foreground">
+                  Monitor and complete tasks to unlock special memories. Mark tasks as complete when they're done in real life.
+                </p>
+              </div>
+              <TaskManagement memoryGroups={memoryGroups} />
             </div>
           )}
 

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Heart, Image as ImageIcon, Video, Clock, Lock, Users } from 'lucide-react'
 import { format } from 'date-fns'
+import CountdownTimer from './CountdownTimer'
 
 interface MemoryGroupCardProps {
   memoryGroup: MemoryGroup
@@ -27,6 +28,56 @@ export default function MemoryGroupCard({ memoryGroup, viewMode, onClick }: Memo
     }, null as Date | null) || new Date(memoryGroup.created_at)
   }
 
+  // Check if memory is actually locked (and not just scheduled for future unlock)
+  const isCurrentlyLocked = memoryGroup.is_locked && 
+    (!memoryGroup.unlock_date || memoryGroup.unlock_date > new Date())
+  
+  // Render media with blur effect if needed
+  const renderMediaContent = (className: string, size: 'small' | 'medium' | 'large' = 'medium') => {
+    if (!coverMedia) {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <Heart className={`text-primary/40 ${size === 'small' ? 'h-6 w-6' : size === 'large' ? 'h-12 w-12' : 'h-8 w-8'}`} />
+        </div>
+      )
+    }
+
+    const isVideo = coverMedia.file_type && coverMedia.file_type.startsWith('video/')
+    const shouldBlur = isCurrentlyLocked && 
+      memoryGroup.lock_visibility === 'public' && 
+      memoryGroup.show_image_preview
+    
+    const blurStyle = shouldBlur ? {
+      filter: `blur(${(memoryGroup.blur_percentage || 80) / 10}px)`
+    } : {}
+
+    if (isVideo) {
+      return (
+        <div className="relative w-full h-full">
+          <video
+            src={coverMedia.s3_url}
+            className={className}
+            style={blurStyle}
+            muted
+            playsInline
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <Video className={`text-white ${size === 'small' ? 'h-3 w-3' : size === 'large' ? 'h-8 w-8' : 'h-4 w-4'}`} />
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <img
+        src={coverMedia.s3_url}
+        alt={memoryGroup.title || 'Memory'}
+        className={className}
+        style={blurStyle}
+      />
+    )
+  }
+
   const renderContent = () => {
     switch (viewMode) {
       case 'list':
@@ -35,11 +86,25 @@ export default function MemoryGroupCard({ memoryGroup, viewMode, onClick }: Memo
             {/* Thumbnail */}
             <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-accent/20 flex-shrink-0">
               {coverMedia ? (
-                <img
-                  src={coverMedia.s3_url}
-                  alt={memoryGroup.title || 'Memory'}
-                  className="w-full h-full object-cover"
-                />
+                coverMedia.file_type && coverMedia.file_type.startsWith('video/') ? (
+                  <div className="relative w-full h-full">
+                    <video
+                      src={coverMedia.s3_url}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Video className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={coverMedia.s3_url}
+                    alt={memoryGroup.title || 'Memory'}
+                    className="w-full h-full object-cover"
+                  />
+                )
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Heart className="h-6 w-6 text-primary/40" />
@@ -99,11 +164,25 @@ export default function MemoryGroupCard({ memoryGroup, viewMode, onClick }: Memo
         return (
           <div className="aspect-square relative group">
             {coverMedia ? (
-              <img
-                src={coverMedia.s3_url}
-                alt={memoryGroup.title || 'Memory'}
-                className="w-full h-full object-cover"
-              />
+              coverMedia.file_type && coverMedia.file_type.startsWith('video/') ? (
+                <div className="relative w-full h-full">
+                  <video
+                    src={coverMedia.s3_url}
+                    className="w-full h-full object-cover"
+                    muted
+                    playsInline
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <Video className="h-8 w-8 text-white" />
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={coverMedia.s3_url}
+                  alt={memoryGroup.title || 'Memory'}
+                  className="w-full h-full object-cover"
+                />
+              )
             ) : (
               <div className="w-full h-full bg-accent/20 flex items-center justify-center">
                 <Heart className="h-12 w-12 text-primary/40" />
@@ -219,11 +298,25 @@ export default function MemoryGroupCard({ memoryGroup, viewMode, onClick }: Memo
                 {/* Thumbnail */}
                 <div className="relative w-12 h-12 rounded overflow-hidden bg-accent/20 flex-shrink-0">
                   {coverMedia ? (
-                    <img
-                      src={coverMedia.s3_url}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
+                    coverMedia.file_type && coverMedia.file_type.startsWith('video/') ? (
+                      <div className="relative w-full h-full">
+                        <video
+                          src={coverMedia.s3_url}
+                          className="w-full h-full object-cover"
+                          muted
+                          playsInline
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Video className="h-3 w-3 text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img
+                        src={coverMedia.s3_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    )
                   ) : (
                     <Heart className="h-6 w-6 text-primary/40 m-3" />
                   )}
@@ -258,17 +351,30 @@ export default function MemoryGroupCard({ memoryGroup, viewMode, onClick }: Memo
       default: // gallery
         return (
           <div className="relative group">
-            {/* Main image */}
+            {/* Main image/video */}
             <div className="aspect-[4/3] overflow-hidden rounded-lg bg-accent/20">
-              {coverMedia ? (
-                <img
-                  src={coverMedia.s3_url}
-                  alt={memoryGroup.title || 'Memory'}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Heart className="h-12 w-12 text-primary/40" />
+              {renderMediaContent("w-full h-full object-cover group-hover:scale-105 transition-transform duration-300", 'large')}
+              
+              {/* Locked overlay for public locked memories */}
+              {isCurrentlyLocked && memoryGroup.lock_visibility === 'public' && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <div className="text-center text-white p-4">
+                    <Lock className="h-8 w-8 mx-auto mb-2" />
+                    {memoryGroup.unlock_hint && (
+                      <p className="text-sm font-medium">{memoryGroup.unlock_hint}</p>
+                    )}
+                    {memoryGroup.unlock_type === 'scheduled' && memoryGroup.unlock_date && (
+                      <div className="mt-2">
+                        <CountdownTimer 
+                          unlockDate={new Date(memoryGroup.unlock_date)} 
+                          className="text-white justify-center"
+                        />
+                      </div>
+                    )}
+                    {memoryGroup.unlock_type === 'task_based' && memoryGroup.unlock_task && (
+                      <p className="text-xs mt-1 opacity-90">Task: {memoryGroup.unlock_task}</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
