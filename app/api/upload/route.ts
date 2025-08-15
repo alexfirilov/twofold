@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generatePresignedUploadUrl, isValidFileType, getMaxFileSize } from '@/lib/s3'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth } from '@/lib/firebase/serverAuth'
 
 /**
  * POST /api/upload - Generate presigned URL for file upload
@@ -8,7 +8,7 @@ import { requireAuth } from '@/lib/auth'
 export async function POST(request: NextRequest) {
   try {
     // Require authentication
-    await requireAuth()
+    const user = await requireAuth()
 
     const { filename, fileType, fileSize } = await request.json()
 

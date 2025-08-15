@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation' 
-import { MemoryGroup, UpdateMemoryGroup } from '@/lib/db'
+import { MemoryGroup, UpdateMemoryGroup } from '@/lib/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -131,6 +131,7 @@ export default function MemoryGroupManagement({ memoryGroups }: MemoryGroupManag
       const response = await fetch('/api/memory-groups', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ id: editingGroup.id, ...updates })
       })
 
@@ -160,7 +161,8 @@ export default function MemoryGroupManagement({ memoryGroups }: MemoryGroupManag
 
     try {
       const response = await fetch(`/api/memory-groups?id=${group.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       })
 
       if (!response.ok) {

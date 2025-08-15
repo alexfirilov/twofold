@@ -1,5 +1,7 @@
 import './globals.css'
 import { Dancing_Script, Quicksand } from 'next/font/google'
+import { AuthProvider } from './contexts/AuthContext'
+import { CornerProvider } from './contexts/CornerContext'
 
 const dancingScript = Dancing_Script({ 
   subsets: ['latin'],
@@ -26,7 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${dancingScript.variable} font-body bg-background text-foreground antialiased`}>
-        {children}
+        <AuthProvider>
+          <CornerProvider>
+            {children}
+          </CornerProvider>
+        </AuthProvider>
       </body>
     </html>
   )

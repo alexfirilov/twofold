@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { MediaItem } from '@/lib/db'
+import { MediaItem } from '@/lib/types'
 import MediaCard from './MediaCard'
 import MediaDetailModal from './MediaDetailModal'
 import { Heart, Search, Calendar, Image as ImageIcon, Video, LogOut } from 'lucide-react'
@@ -18,6 +18,9 @@ export default function MediaGallery({ mediaItems }: MediaGalleryProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all')
   const router = useRouter()
+
+  // Note: This component receives pre-filtered mediaItems from parent
+  // The parent component should ensure mediaItems are already filtered by corner
 
   // Filter media based on search term and type
   const filteredMedia = mediaItems.filter(media => {

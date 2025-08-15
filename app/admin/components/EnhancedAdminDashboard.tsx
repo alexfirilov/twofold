@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MemoryGroup } from '@/lib/db'
+import { MemoryGroup } from '@/lib/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,12 +26,13 @@ import {
 import EnhancedUploadForm from './EnhancedUploadForm'
 import MemoryGroupManagement from './MemoryGroupManagement'
 import LockingControls from './LockingControls'
+import UserManagement from './UserManagement'
 
 interface EnhancedAdminDashboardProps {
   memoryGroups: MemoryGroup[]
 }
 
-type ActiveTab = 'upload' | 'manage' | 'locking' | 'analytics'
+type ActiveTab = 'upload' | 'manage' | 'locking' | 'users' | 'analytics'
 
 export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('upload')
@@ -92,6 +93,12 @@ export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDa
       label: 'Lock Control',
       icon: Lock,
       description: 'Manage visibility & scheduling'
+    },
+    {
+      id: 'users' as ActiveTab,
+      label: 'Users',
+      icon: Users,
+      description: 'Manage corner members'
     },
     {
       id: 'analytics' as ActiveTab,
@@ -259,6 +266,17 @@ export default function EnhancedAdminDashboard({ memoryGroups }: EnhancedAdminDa
             </div>
           )}
 
+          {activeTab === 'users' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-xl font-romantic text-primary mb-2">User Management</h2>
+                <p className="text-muted-foreground">
+                  Manage corner members, send invitations, and configure user permissions.
+                </p>
+              </div>
+              <UserManagement />
+            </div>
+          )}
 
           {activeTab === 'analytics' && (
             <div>

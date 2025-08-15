@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// For now, let's simplify by not doing JWT verification in middleware
-// We'll rely on the API route verification instead
-
-const JWT_SECRET = process.env.JWT_SECRET!
-
 // Routes that require authentication
 const PROTECTED_ROUTES = [
   '/',
@@ -15,14 +10,15 @@ const PROTECTED_ROUTES = [
 // Routes that should redirect to home if already authenticated
 const AUTH_ROUTES = [
   '/login',
+  '/signup',
 ]
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const sessionCookie = request.cookies.get('our-corner-session')
+  const sessionCookie = request.cookies.get('firebase-session')
 
-  // Check if user has a session cookie (basic check)
-  // Full JWT verification will happen in API routes
+  // Check if user has a Firebase session cookie (basic check)
+  // Full Firebase token verification will happen in API routes
   const hasSessionCookie = !!sessionCookie?.value
 
   // Skip middleware for API routes and static files
@@ -32,22 +28,26 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Handle protected routes (exact path matching to avoid conflicts)
-  if (pathname === '/' || pathname === '/admin') {
+  // Handle auth pages (redirect if already authenticated)  
+  if (pathname === '/login' || pathname === '/signup') {
+    if (hasSessionCookie) {
+      const from = request.nextUrl.searchParams.get('from')
+      const redirectUrl = new URL(from || '/', request.url)
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  // Handle admin route (require authentication)
+  if (pathname === '/admin') {
     if (!hasSessionCookie) {
       const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('from', pathname)
       return NextResponse.redirect(loginUrl)
     }
   }
 
-  // Handle login page (redirect if already authenticated)
-  if (pathname === '/login') {
-    if (hasSessionCookie) {
-      // Redirect to home page
-      const homeUrl = new URL('/', request.url)
-      return NextResponse.redirect(homeUrl)
-    }
-  }
+  // For root path, let the client-side handle authentication
+  // This prevents redirect loops during auth state transitions
 
   // Add security headers
   const response = NextResponse.next()
@@ -88,5 +88,8 @@ export const config = {
     '/',
     '/admin',
     '/login',
+    '/signup',
+    // Add support for corner routes
+    '/corner/:path*',
   ],
 }

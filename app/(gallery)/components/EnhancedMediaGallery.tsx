@@ -1,15 +1,16 @@
 "use client"
 
 import { useState, useMemo } from 'react'
-import { MemoryGroup, ViewMode, SortOptions, MediaFilters } from '@/lib/db'
+import { MemoryGroup } from '@/lib/types'
+import { ViewMode, SortOptions, MediaFilters } from '@/lib/db'
 import MemoryGroupCard from './MemoryGroupCard'
 import MemoryGroupDetailModal from './MemoryGroupDetailModal'
 import ViewControls from './ViewControls'
 import FilterControls from './FilterControls'
 import SortControls from './SortControls'
-import { Heart, LogOut } from 'lucide-react'
+import { Heart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useRouter } from 'next/navigation'
+import ProfileDropdown from '../../components/ProfileDropdown'
 
 interface EnhancedMediaGalleryProps {
   memoryGroups: MemoryGroup[]
@@ -20,7 +21,6 @@ export default function EnhancedMediaGallery({ memoryGroups }: EnhancedMediaGall
   const [viewMode, setViewMode] = useState<ViewMode>('gallery')
   const [filters, setFilters] = useState<MediaFilters>({})
   const [sortOptions, setSortOptions] = useState<SortOptions>({ field: 'created_at', direction: 'desc' })
-  const router = useRouter()
 
   // Filter and sort memory groups
   const filteredAndSortedGroups = useMemo(() => {
@@ -98,14 +98,6 @@ export default function EnhancedMediaGallery({ memoryGroups }: EnhancedMediaGall
     return filtered
   }, [memoryGroups, filters, sortOptions])
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth', { method: 'DELETE' })
-      router.push('/login')
-    } catch (error) {
-      console.error('Logout error:', error)
-    }
-  }
 
   const getTotalCounts = () => {
     const totalMedia = memoryGroups.reduce((sum, group) => sum + (group.media_count || 0), 0)
@@ -140,15 +132,7 @@ export default function EnhancedMediaGallery({ memoryGroups }: EnhancedMediaGall
 
             {/* Actions */}
             <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
+              <ProfileDropdown />
             </div>
           </div>
 
@@ -226,17 +210,6 @@ export default function EnhancedMediaGallery({ memoryGroups }: EnhancedMediaGall
         />
       )}
 
-      {/* Floating Admin Button */}
-      <div className="fixed bottom-6 right-6 opacity-0 hover:opacity-100 transition-opacity duration-300">
-        <Button
-          onClick={() => router.push('/admin')}
-          variant="outline" 
-          size="sm"
-          className="bg-white/80 backdrop-blur-sm"
-        >
-          Admin
-        </Button>
-      </div>
     </div>
   )
 }

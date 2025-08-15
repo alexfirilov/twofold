@@ -1,6 +1,7 @@
 "use client"
 
-import { MemoryGroup, ViewMode } from '@/lib/db'
+import { MemoryGroup } from '@/lib/types'
+import { ViewMode } from '@/lib/db'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Heart, Image as ImageIcon, Video, Clock, Lock, Users } from 'lucide-react'

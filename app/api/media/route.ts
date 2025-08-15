@@ -4,11 +4,10 @@ import {
   createMediaItem, 
   updateMediaItem, 
   deleteMediaItem,
-  getMediaById,
-  CreateMediaItem,
-  UpdateMediaItem 
+  getMediaById
 } from '@/lib/db'
-import { requireAuth } from '@/lib/auth'
+import type { CreateMediaItem, UpdateMediaItem } from '@/lib/types'
+import { requireCornerAccess, getUserFromAuthHeader } from '@/lib/firebase/serverAuth'
 import { deleteFileFromS3 } from '@/lib/s3'
 
 /**
@@ -16,10 +15,32 @@ import { deleteFileFromS3 } from '@/lib/s3'
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth()
+    const url = new URL(request.url)
+    const cornerId = url.searchParams.get('corner_id')
+    
+    if (!cornerId) {
+      return NextResponse.json(
+        { error: 'corner_id parameter is required' },
+        { status: 400 }
+      )
+    }
 
-    const mediaItems = await getAllMedia()
-    return NextResponse.json(mediaItems, { status: 200 })
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(cornerId, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    const mediaItems = await getAllMedia(cornerId)
+    
+    return NextResponse.json(
+      { success: true, data: mediaItems },
+      { status: 200 }
+    )
 
   } catch (error) {
     console.error('Get media error:', error)
@@ -43,9 +64,24 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
-
     const mediaData: CreateMediaItem = await request.json()
+
+    if (!mediaData.corner_id) {
+      return NextResponse.json(
+        { error: 'corner_id is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(mediaData.corner_id, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
 
     // Validate required fields
     if (!mediaData.filename || !mediaData.s3_key || !mediaData.s3_url || !mediaData.file_type || !mediaData.file_size) {
@@ -55,8 +91,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Add uploader information
+    mediaData.uploaded_by_firebase_uid = user.uid
+
     const newMedia = await createMediaItem(mediaData)
-    return NextResponse.json(newMedia, { status: 201 })
+    
+    return NextResponse.json(
+      { success: true, data: newMedia },
+      { status: 201 }
+    )
 
   } catch (error) {
     console.error('Create media error:', error)
@@ -80,9 +123,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth()
-
-    const { id, ...updates }: { id: string } & UpdateMediaItem = await request.json()
+    const { id, corner_id, ...updates }: { id: string; corner_id: string } & UpdateMediaItem = await request.json()
 
     if (!id) {
       return NextResponse.json(
@@ -91,16 +132,39 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const updatedMedia = await updateMediaItem(id, updates)
+    if (!corner_id) {
+      return NextResponse.json(
+        { error: 'corner_id is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(corner_id, authHeader)
     
-    if (!updatedMedia) {
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    // Verify the media item belongs to the corner
+    const existingMedia = await getMediaById(id, corner_id)
+    
+    if (!existingMedia) {
       return NextResponse.json(
         { error: 'Media item not found' },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(updatedMedia, { status: 200 })
+    const updatedMedia = await updateMediaItem(id, updates)
+    
+    return NextResponse.json(
+      { success: true, data: updatedMedia },
+      { status: 200 }
+    )
 
   } catch (error) {
     console.error('Update media error:', error)
@@ -124,10 +188,9 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAuth()
-
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const corner_id = searchParams.get('corner_id')
 
     if (!id) {
       return NextResponse.json(
@@ -136,8 +199,25 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Get media item to get S3 key for deletion
-    const mediaItem = await getMediaById(id)
+    if (!corner_id) {
+      return NextResponse.json(
+        { error: 'corner_id is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(corner_id, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    // Get media item to verify it belongs to the corner and get S3 key for deletion
+    const mediaItem = await getMediaById(id, corner_id)
     
     if (!mediaItem) {
       return NextResponse.json(
@@ -165,7 +245,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { message: 'Media item deleted successfully' },
+      { success: true, message: 'Media item deleted successfully' },
       { status: 200 }
     )
 

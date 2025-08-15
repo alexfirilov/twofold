@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { MemoryGroup, MediaItem } from '@/lib/db'
+import { MemoryGroup, MediaItem } from '@/lib/types'
 import {
   Dialog,
   DialogContent,

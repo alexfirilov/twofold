@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import { Heart, Play, Calendar, FileText } from 'lucide-react'
-import { MediaItem } from '@/lib/db'
+import { MediaItem } from '@/lib/types'
 import { formatDistanceToNow } from 'date-fns'
 
 interface MediaCardProps {

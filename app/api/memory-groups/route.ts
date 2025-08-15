@@ -4,25 +4,44 @@ import {
   createMemoryGroup, 
   updateMemoryGroup, 
   deleteMemoryGroup,
-  getMemoryGroupById,
-  CreateMemoryGroup,
-  UpdateMemoryGroup 
+  getMemoryGroupById
 } from '@/lib/db'
-import { requireAuth } from '@/lib/auth'
+import type { CreateMemoryGroup, UpdateMemoryGroup } from '@/lib/types'
+import { requireAuth, requireCornerAccess, getUserFromAuthHeader } from '@/lib/firebase/serverAuth'
 
 /**
  * GET /api/memory-groups - Get all memory groups
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth()
-
     const { searchParams } = new URL(request.url)
+    const cornerId = searchParams.get('cornerId')
     const includeMedia = searchParams.get('includeMedia') !== 'false'
     const includeLocked = searchParams.get('includeLocked') === 'true'
 
-    const memoryGroups = await getAllMemoryGroups(includeMedia, includeLocked)
-    return NextResponse.json(memoryGroups, { status: 200 })
+    if (!cornerId) {
+      return NextResponse.json(
+        { error: 'Corner ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(cornerId, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    const memoryGroups = await getAllMemoryGroups(cornerId, includeMedia, includeLocked)
+    
+    return NextResponse.json(
+      { success: true, memoryGroups },
+      { status: 200 }
+    )
 
   } catch (error) {
     console.error('Get memory groups error:', error)
@@ -46,12 +65,48 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
+    const body = await request.json()
+    const { corner_id, title, description, is_locked, unlock_date } = body
 
-    const groupData: CreateMemoryGroup = await request.json()
+    if (!corner_id) {
+      return NextResponse.json(
+        { error: 'Corner ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(corner_id, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    if (!title?.trim()) {
+      return NextResponse.json(
+        { error: 'Memory group title is required' },
+        { status: 400 }
+      )
+    }
+
+    const groupData: CreateMemoryGroup = {
+      corner_id,
+      title: title.trim(),
+      description: description?.trim() || undefined,
+      is_locked: is_locked || false,
+      unlock_date: unlock_date ? new Date(unlock_date) : undefined,
+      created_by_firebase_uid: user.uid,
+    }
 
     const newGroup = await createMemoryGroup(groupData)
-    return NextResponse.json(newGroup, { status: 201 })
+    
+    return NextResponse.json(
+      { success: true, data: newGroup },
+      { status: 201 }
+    )
 
   } catch (error) {
     console.error('Create memory group error:', error)
@@ -75,14 +130,39 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth()
-
-    const { id, ...updates }: { id: string } & UpdateMemoryGroup = await request.json()
+    const { id, corner_id, ...updates }: { id: string; corner_id: string } & UpdateMemoryGroup = await request.json()
 
     if (!id) {
       return NextResponse.json(
         { error: 'Memory group ID is required' },
         { status: 400 }
+      )
+    }
+
+    if (!corner_id) {
+      return NextResponse.json(
+        { error: 'Corner ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(corner_id, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    // Verify the memory group belongs to the corner
+    const existingGroup = await getMemoryGroupById(id, false)
+    
+    if (!existingGroup || existingGroup.corner_id !== corner_id) {
+      return NextResponse.json(
+        { error: 'Memory group not found' },
+        { status: 404 }
       )
     }
 
@@ -119,15 +199,41 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAuth()
-
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const corner_id = searchParams.get('corner_id')
 
     if (!id) {
       return NextResponse.json(
         { error: 'Memory group ID is required' },
         { status: 400 }
+      )
+    }
+
+    if (!corner_id) {
+      return NextResponse.json(
+        { error: 'Corner ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const authHeader = request.headers.get('Authorization') || undefined
+    const { user, hasAccess } = await requireCornerAccess(corner_id, authHeader)
+    
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Access denied to this corner' },
+        { status: 403 }
+      )
+    }
+
+    // Verify the memory group belongs to the corner
+    const existingGroup = await getMemoryGroupById(id, false)
+    
+    if (!existingGroup || existingGroup.corner_id !== corner_id) {
+      return NextResponse.json(
+        { error: 'Memory group not found' },
+        { status: 404 }
       )
     }
 

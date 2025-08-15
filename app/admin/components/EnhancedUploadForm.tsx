@@ -2,7 +2,8 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreateMemoryGroup, CreateMediaItem } from '@/lib/db'
+import { useCorner } from '@/contexts/CornerContext'
+import { CreateMemoryGroup, CreateMediaItem } from '@/lib/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +38,7 @@ interface FileWithPreview {
 }
 
 export default function EnhancedUploadForm() {
+  const { currentCorner } = useCorner()
   const [memoryTitle, setMemoryTitle] = useState('')
   const [memoryDescription, setMemoryDescription] = useState('')
   const [isLocked, setIsLocked] = useState(false)
@@ -45,6 +47,7 @@ export default function EnhancedUploadForm() {
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [allowNoMedia, setAllowNoMedia] = useState(false)
   
   // Advanced locking features
   const [lockVisibility, setLockVisibility] = useState<'public' | 'private'>('private')
@@ -98,8 +101,13 @@ export default function EnhancedUploadForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (selectedFiles.length === 0) {
-      alert('Please select at least one file')
+    if (!allowNoMedia && selectedFiles.length === 0) {
+      alert('Please select at least one file or enable "Create without media"')
+      return
+    }
+
+    if (allowNoMedia && !memoryTitle.trim()) {
+      alert('Memory title is required when creating without media')
       return
     }
 
@@ -107,7 +115,12 @@ export default function EnhancedUploadForm() {
 
     try {
       // Step 1: Create memory group
+      if (!currentCorner) {
+        throw new Error('No corner selected')
+      }
+
       const memoryGroupData: CreateMemoryGroup = {
+        corner_id: currentCorner.id,
         title: memoryTitle || undefined,
         description: memoryDescription || undefined,
         is_locked: isLocked,
@@ -140,10 +153,11 @@ export default function EnhancedUploadForm() {
         throw new Error('Failed to create memory group')
       }
 
-      const memoryGroup = await groupResponse.json()
+      const { data: memoryGroup } = await groupResponse.json()
 
       // Step 2: Upload files and create media items (sequential to maintain order)
-      for (let i = 0; i < selectedFiles.length; i++) {
+      if (selectedFiles.length > 0) {
+        for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i]
         try {
           // Update progress
@@ -185,6 +199,7 @@ export default function EnhancedUploadForm() {
 
           // Create media item in database
           const mediaData: CreateMediaItem = {
+            corner_id: currentCorner.id,
             memory_group_id: memoryGroup.id,
             filename: file.file.name,
             original_name: file.file.name,
@@ -223,6 +238,7 @@ export default function EnhancedUploadForm() {
           )
         }
       }
+      }
 
       // Success - redirect or reset form
       alert('Memory created successfully!')
@@ -235,6 +251,7 @@ export default function EnhancedUploadForm() {
       setUnlockTime('')
       setSelectedFiles([])
       setUploadProgress({})
+      setAllowNoMedia(false)
       // Reset advanced locking fields
       setLockVisibility('private')
       setShowDateHint(false)
@@ -251,7 +268,7 @@ export default function EnhancedUploadForm() {
       setUnlockTask('')
       
       // Refresh the page
-      router.refresh()
+      window.location.reload()
 
     } catch (error) {
       console.error('Upload error:', error)
@@ -299,6 +316,20 @@ export default function EnhancedUploadForm() {
               onChange={setMemoryDescription}
               placeholder="Add a beautiful description of this memory..."
             />
+          </div>
+
+          {/* Create without media option */}
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="allow-no-media"
+              checked={allowNoMedia}
+              onChange={(e) => setAllowNoMedia(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <Label htmlFor="allow-no-media">
+              Create memory without uploading media (text-only memory)
+            </Label>
           </div>
         </CardContent>
       </Card>
@@ -571,6 +602,7 @@ export default function EnhancedUploadForm() {
       </Card>
 
       {/* File Upload */}
+      {!allowNoMedia && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -717,12 +749,13 @@ export default function EnhancedUploadForm() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Submit Button */}
       <div className="flex justify-end">
         <Button
           type="submit"
-          disabled={isUploading || selectedFiles.length === 0}
+          disabled={isUploading || (!allowNoMedia && selectedFiles.length === 0)}
           className="romantic-button"
         >
           {isUploading ? (

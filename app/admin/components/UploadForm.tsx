@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef } from 'react'
+import { useCorner } from '@/contexts/CornerContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
 import { 
   Upload, 
   X, 
@@ -14,7 +16,8 @@ import {
   Calendar,
   FileText,
   Check,
-  AlertCircle
+  AlertCircle,
+  MapPin
 } from 'lucide-react'
 import RichTextEditor from './RichTextEditor'
 
@@ -32,12 +35,14 @@ interface UploadProgress {
 }
 
 export default function UploadForm() {
+  const { currentCorner, loading: cornerLoading } = useCorner()
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [dateTaken, setDateTaken] = useState('')
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({})
   const [isUploading, setIsUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,8 +80,12 @@ export default function UploadForm() {
     })
   }
 
-  const uploadFile = async (file: FileWithPreview): Promise<void> => {
+  const uploadFile = async (file: FileWithPreview, memoryGroupId?: string): Promise<void> => {
     const fileId = file.id
+    
+    if (!currentCorner) {
+      throw new Error('No corner selected. Please select a corner before uploading.')
+    }
     
     try {
       // Update progress to uploading
@@ -97,7 +106,8 @@ export default function UploadForm() {
       })
 
       if (!presignedResponse.ok) {
-        throw new Error('Failed to get upload URL')
+        const errorData = await presignedResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to get upload URL')
       }
 
       const { uploadUrl, key, fileUrl } = await presignedResponse.json()
@@ -117,10 +127,10 @@ export default function UploadForm() {
       })
 
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file')
+        throw new Error('Failed to upload file to storage')
       }
 
-      // Create media record in database
+      // Create media record in database with corner_id and memory_group_id
       setUploadProgress(prev => ({
         ...prev,
         [fileId]: { progress: 80, status: 'processing' }
@@ -130,6 +140,8 @@ export default function UploadForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          corner_id: currentCorner.id,
+          memory_group_id: memoryGroupId, // Associate with the created memory group
           filename: file.name,
           original_name: file.name,
           s3_key: key,
@@ -143,7 +155,8 @@ export default function UploadForm() {
       })
 
       if (!mediaResponse.ok) {
-        throw new Error('Failed to save media record')
+        const errorData = await mediaResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to save media record')
       }
 
       // Mark as completed
@@ -167,34 +180,75 @@ export default function UploadForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    
+    if (!currentCorner) {
+      setError('No corner selected. Please select a corner before uploading.')
+      return
+    }
     
     if (files.length === 0) {
-      alert('Please select at least one file to upload.')
+      setError('Please select at least one file to upload.')
       return
     }
 
     setIsUploading(true)
 
     try {
-      // Upload all files concurrently
-      await Promise.all(files.map(file => uploadFile(file)))
-      
-      // Reset form after successful upload
-      setFiles([])
-      setTitle('')
-      setNote('')
-      setDateTaken('')
-      setUploadProgress({})
-      
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      // Step 1: Create a memory group for this upload batch
+      let memoryGroup = null
+      try {
+        const memoryGroupResponse = await fetch('/api/memory-groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            corner_id: currentCorner.id,
+            title: title || `Upload ${new Date().toLocaleDateString()}`,
+            description: note || 'Media upload',
+            is_locked: false,
+          }),
+        })
+
+        if (memoryGroupResponse.ok) {
+          const memoryGroupData = await memoryGroupResponse.json()
+          memoryGroup = memoryGroupData.data
+        } else {
+          throw new Error('Failed to create memory group')
+        }
+      } catch (error) {
+        console.error('Failed to create memory group:', error)
+        setError('Failed to create memory group. Please try again.')
+        setIsUploading(false)
+        return
       }
 
-      // Refresh the page to show new uploads
-      window.location.reload()
+      // Step 2: Upload all files with the memory group ID
+      await Promise.all(files.map(file => uploadFile(file, memoryGroup.id)))
+      
+      // Check if all uploads were successful
+      const hasErrors = Object.values(uploadProgress).some(progress => progress.status === 'error')
+      
+      if (!hasErrors) {
+        // Reset form after successful upload
+        setFiles([])
+        setTitle('')
+        setNote('')
+        setDateTaken('')
+        setUploadProgress({})
+        
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+
+        // Refresh the page to show new uploads
+        window.location.reload()
+      } else {
+        setError('Some files failed to upload. Please check the individual file status and try again.')
+      }
       
     } catch (error) {
       console.error('Batch upload error:', error)
+      setError(error instanceof Error ? error.message : 'Upload failed. Please try again.')
     } finally {
       setIsUploading(false)
     }
@@ -220,8 +274,67 @@ export default function UploadForm() {
     return `${size.toFixed(1)} ${units[unitIndex]}`
   }
 
+  // Show loading state while corner context is loading
+  if (cornerLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading corner information...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Corner Status Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-romantic text-primary">
+            <MapPin className="h-5 w-5" />
+            Upload Destination
+          </CardTitle>
+          <CardDescription className="font-body">
+            Your files will be uploaded to the selected corner
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {currentCorner ? (
+            <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
+              <Heart className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-primary">{currentCorner.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {currentCorner.description || 'Your selected corner'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <div>
+                <p className="font-medium text-yellow-800">No corner selected</p>
+                <p className="text-sm text-yellow-700">
+                  Please select a corner from the main page before uploading files.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Error Display */}
+      {error && (
+        <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle className="h-5 w-5 text-red-600" />
+          <div>
+            <p className="font-medium text-red-800">Upload Error</p>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* File Upload Section */}
       <Card>
         <CardHeader>
@@ -235,18 +348,34 @@ export default function UploadForm() {
         </CardHeader>
         <CardContent>
           <div
-            className="border-2 border-dashed border-accent/30 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              currentCorner 
+                ? 'border-accent/30 cursor-pointer hover:border-primary/50' 
+                : 'border-muted/30 cursor-not-allowed opacity-50'
+            }`}
+            onClick={() => currentCorner && fileInputRef.current?.click()}
           >
-            <Upload className="h-12 w-12 text-primary/40 mx-auto mb-4" />
-            <h3 className="text-lg font-romantic text-primary mb-2">
-              Drop files here or click to browse
+            <Upload className={`h-12 w-12 mx-auto mb-4 ${
+              currentCorner ? 'text-primary/40' : 'text-muted-foreground/40'
+            }`} />
+            <h3 className={`text-lg font-romantic mb-2 ${
+              currentCorner ? 'text-primary' : 'text-muted-foreground'
+            }`}>
+              {currentCorner ? 'Drop files here or click to browse' : 'Select a corner first'}
             </h3>
             <p className="text-muted-foreground font-body mb-4">
-              Supports images (JPG, PNG, GIF, WebP, HEIC) and videos (MP4, MOV, WebM)
+              {currentCorner 
+                ? 'Supports images (JPG, PNG, GIF, WebP, HEIC) and videos (MP4, MOV, WebM)'
+                : 'You need to select a corner before you can upload files'
+              }
             </p>
-            <Button type="button" variant="outline" className="font-body">
-              Choose Files
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="font-body"
+              disabled={!currentCorner}
+            >
+              {currentCorner ? 'Choose Files' : 'No Corner Selected'}
             </Button>
           </div>
 
@@ -256,6 +385,7 @@ export default function UploadForm() {
             multiple
             accept="image/*,video/*"
             onChange={handleFileSelect}
+            disabled={!currentCorner}
             className="hidden"
           />
 
@@ -406,7 +536,7 @@ export default function UploadForm() {
           type="submit"
           variant="romantic"
           size="lg"
-          disabled={files.length === 0 || isUploading}
+          disabled={!currentCorner || files.length === 0 || isUploading}
           className="min-w-[200px]"
         >
           {isUploading ? (

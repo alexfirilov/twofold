@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Image from 'next/image'
-import { MediaItem } from '@/lib/db'
+import { MediaItem } from '@/lib/types'
 import {
   Dialog,
   DialogContent,
