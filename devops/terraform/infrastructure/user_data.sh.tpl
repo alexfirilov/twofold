@@ -24,15 +24,13 @@ aws ecr get-login-password --region ${aws_region} | docker login --username AWS 
 echo "ECR login successful."
 
 # --- Pull and Run the Application Container ---
-# This is the core of the script. It runs the specific image tag provided by the Launch Template.
-# The CI/CD pipeline will be responsible for creating new Launch Template versions with updated image tags.
+# This runs the specific image tag provided by Terraform variables
 IMAGE_TO_RUN="${ecr_repo_url}:${image_tag}"
 echo "Pulling container image: $IMAGE_TO_RUN"
 docker pull $IMAGE_TO_RUN
 
 echo "Running container..."
-# We map container port 3000 (standard for Next.js) to host port 80.
-# The Load Balancer will send traffic to port 80 on this instance.
+# Map container port 3000 (Next.js) to host port 80
 docker run -d --name app-container -p 80:3000 --restart always $IMAGE_TO_RUN
 
 echo "User data script finished successfully."

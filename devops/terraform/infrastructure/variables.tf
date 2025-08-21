@@ -19,3 +19,9 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+variable "image_tag" {
+  description = "The Docker image tag to deploy."
+  type        = string
+  default     = "latest"
+}

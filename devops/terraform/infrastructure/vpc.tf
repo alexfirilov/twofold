@@ -1,5 +1,5 @@
 resource "aws_vpc" "main" {
-  cidr_block = var.vpc_cide_block
+  cidr_block = var.vpc_cidr_block
 
   tags = {
     Name = "${terraform.workspace}-vpc"
@@ -9,7 +9,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.subnet_cidr_block
-  map_public_ip_on_launch = true # Instances in this subnet get a public IP
+  map_public_ip_on_launch = true
 
   tags = {
     Name = "${terraform.workspace}-public-subnet"
