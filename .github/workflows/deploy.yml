@@ -1,0 +1,194 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - staging
+  pull_request:
+    branches:
+      - main
+      - develop
+      - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+env:
+  AWS_REGION: il-central-1
+
+jobs:
+  # Determine environment based on branch or manual input
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.determine-env.outputs.environment }}
+      image-tag: ${{ steps.determine-env.outputs.image-tag }}
+    steps:
+      - name: Determine environment
+        id: determine-env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+            echo "image-tag=${{ github.event.inputs.environment }}-${{ github.sha }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "image-tag=prod-${{ github.sha }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            echo "environment=stage" >> $GITHUB_OUTPUT
+            echo "image-tag=stage-${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "image-tag=dev-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+  # Build and push Docker image to ECR
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: github.event_name != 'pull_request'
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ needs.setup.outputs.environment }}-app
+          IMAGE_TAG: ${{ needs.setup.outputs.image-tag }}
+        run: |
+          # Build Docker image with build args for Firebase config
+          docker build \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY="${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.setup.outputs.environment }}-latest .
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.setup.outputs.environment }}-latest
+
+  # Deploy infrastructure with Terraform
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-push]
+    if: github.event_name != 'pull_request'
+    environment: ${{ needs.setup.outputs.environment }}
+    defaults:
+      run:
+        working-directory: devops/terraform/infrastructure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.0"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Workspace
+        run: |
+          # Create workspace if it doesn't exist, otherwise select it
+          terraform workspace select ${{ needs.setup.outputs.environment }} || terraform workspace new ${{ needs.setup.outputs.environment }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var-file="${{ needs.setup.outputs.environment }}.tfvars" \
+            -var="image_tag=${{ needs.setup.outputs.image-tag }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: terraform apply tfplan
+
+      - name: Output deployment info
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: ${{ needs.setup.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance IP**: $(terraform output -raw instance_public_ip)" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECR Repository**: $(terraform output -raw ecr_repository_url)" >> $GITHUB_STEP_SUMMARY
+
+  # Test deployment (basic health check)
+  test-deployment:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy]
+    if: github.event_name != 'pull_request'
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Wait for deployment
+        run: sleep 60
+
+      - name: Get instance info and test
+        run: |
+          cd devops/terraform/infrastructure
+          
+          # Initialize terraform in this context
+          terraform init
+          terraform workspace select ${{ needs.setup.outputs.environment }}
+          
+          INSTANCE_IP=$(terraform output -raw instance_public_ip)
+          echo "Testing deployment at http://$INSTANCE_IP"
+          
+          # Wait for the application to be ready (up to 5 minutes)
+          for i in {1..30}; do
+            if curl -f -s "http://$INSTANCE_IP/api/health" > /dev/null; then
+              echo "✅ Application is healthy!"
+              break
+            fi
+            echo "⏳ Waiting for application... (attempt $i/30)"
+            sleep 10
+          done
+          
+          # Final health check
+          if curl -f -s "http://$INSTANCE_IP/api/health"; then
+            echo "🎉 Deployment successful!"
+            echo "Application is available at: http://$INSTANCE_IP"
+          else
+            echo "❌ Health check failed"
+            exit 1
+          fi
