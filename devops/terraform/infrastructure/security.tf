@@ -43,4 +43,27 @@ resource "aws_security_group" "instance_sg" {
     Name = "${terraform.workspace}-instance-sg"
   }
 }
-    
+
+# Security group for RDS PostgreSQL
+resource "aws_security_group" "rds_sg" {
+  name        = "${terraform.workspace}-rds-sg"
+  description = "Security group for RDS PostgreSQL database"
+  vpc_id      = aws_vpc.main.id
+
+  # Allow PostgreSQL traffic from EC2 instances only
+  ingress {
+    description     = "PostgreSQL from EC2 instances"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.instance_sg.id]
+  }
+
+  # No outbound rules needed for RDS (it's implicit)
+  # RDS instances don't initiate outbound connections
+
+  tags = {
+    Name        = "${terraform.workspace}-rds-sg"
+    Environment = terraform.workspace
+  }
+}

@@ -83,6 +83,9 @@ jobs:
     outputs:
       instance_ip: ${{ steps.terraform-output.outputs.instance_ip }}
       ecr_repo_url: ${{ steps.terraform-output.outputs.ecr_repo_url }}
+      rds_endpoint: ${{ steps.terraform-output.outputs.rds_endpoint }}
+      rds_database_name: ${{ steps.terraform-output.outputs.rds_database_name }}
+      secrets_manager_secret_name: ${{ steps.terraform-output.outputs.secrets_manager_secret_name }}
       ssh_private_key_b64: ${{ steps.ssh-key.outputs.ssh_private_key_b64 }}
     defaults:
       run:
@@ -154,6 +157,9 @@ jobs:
         run: |
           echo "instance_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
           echo "ecr_repo_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+          echo "rds_database_name=$(terraform output -raw rds_database_name)" >> $GITHUB_OUTPUT
+          echo "secrets_manager_secret_name=$(terraform output -raw secrets_manager_secret_name)" >> $GITHUB_OUTPUT
 
       - name: Output deployment info
         run: |
@@ -218,6 +224,11 @@ jobs:
           echo "📋 Checking instance readiness..."
           ssh -o StrictHostKeyChecking=no -i deployment_key ubuntu@$INSTANCE_IP "sudo tail -5 /var/log/user-data.log || echo 'Instance ready for deployment'"
           
+          echo "🔐 Getting database credentials from AWS Secrets Manager..."
+          DB_SECRETS=$(aws secretsmanager get-secret-value --secret-id "${{ needs.deploy.outputs.secrets_manager_secret_name }}" --region ${{ env.AWS_REGION }} --query SecretString --output text)
+          DB_PASSWORD=$(echo "$DB_SECRETS" | jq -r .password)
+          DATABASE_URL="postgresql://postgres:$DB_PASSWORD@${{ needs.deploy.outputs.rds_endpoint }}:5432/${{ needs.deploy.outputs.rds_database_name }}"
+          
           echo "🚀 Starting deployment"
           
           # SSH and deploy
@@ -240,7 +251,7 @@ jobs:
               -p 80:3000 \
               --restart unless-stopped \
               -e NODE_ENV=production \
-              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e DATABASE_URL="$DATABASE_URL" \
               -e APP_PASSWORD="${{ secrets.APP_PASSWORD }}" \
               -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               -e NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
