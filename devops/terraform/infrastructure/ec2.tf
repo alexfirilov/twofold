@@ -63,6 +63,7 @@ resource "aws_iam_role_policy_attachment" "ssm_managed_instance" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+
 # Create an instance profile to pass the role to the EC2 instances
 resource "aws_iam_instance_profile" "instance_profile" {
   name = "${terraform.workspace}-ec2-instance-profile"
@@ -70,12 +71,24 @@ resource "aws_iam_instance_profile" "instance_profile" {
 }
 
 
+# SSH Key Pair for GitHub Actions deployment
+resource "aws_key_pair" "deployment_key" {
+  key_name   = "${terraform.workspace}-deployment-key"
+  public_key = var.deployment_public_key
+
+  tags = {
+    Name        = "${terraform.workspace}-deployment-key"
+    Environment = terraform.workspace
+  }
+}
+
 # EC2 Instance
 resource "aws_instance" "app" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.instance_sg.id]
+  key_name               = aws_key_pair.deployment_key.key_name
   
   # Associate public IP for direct access
   associate_public_ip_address = true

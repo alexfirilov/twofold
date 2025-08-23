@@ -25,3 +25,8 @@ variable "image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "deployment_public_key" {
+  description = "Public SSH key for GitHub Actions deployment access"
+  type        = string
+}

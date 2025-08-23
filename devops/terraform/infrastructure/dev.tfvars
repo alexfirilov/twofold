@@ -10,3 +10,6 @@ instance_type = "t3.micro"
 
 # Application Configuration
 image_tag = "dev-latest"
+
+# Deployment Configuration (will be overridden by GitHub Actions)
+deployment_public_key = "placeholder"

@@ -6,7 +6,6 @@ on:
       environment:
         description: 'Environment to deploy to'
         required: true
-        default: 'DEV'
         type: choice
         options:
           - DEV
@@ -26,7 +25,7 @@ jobs:
       image-tag: ${{ steps.set-env.outputs.image-tag }}
     steps:
       - name: Set environment variables
-        id: set-env
+        id: set-envCTWh
         run: |
           # Convert GitHub Environment name to lowercase for Terraform workspace
           ENV_LOWER=$(echo "${{ github.event.inputs.environment }}" | tr '[:upper:]' '[:lower:]')
@@ -81,6 +80,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup, build-and-push]
     environment: ${{ needs.setup.outputs.environment }}
+    outputs:
+      instance_ip: ${{ steps.terraform-output.outputs.instance_ip }}
+      ecr_repo_url: ${{ steps.terraform-output.outputs.ecr_repo_url }}
+      ssh_private_key: ${{ steps.ssh-key.outputs.ssh_private_key }}
     defaults:
       run:
         working-directory: devops/terraform/infrastructure
@@ -99,6 +102,16 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Generate SSH key for deployment
+        run: |
+          ssh-keygen -t rsa -b 4096 -f deployment_key -N "" -C "github-actions-${{ needs.setup.outputs.terraform-env }}"
+          echo "SSH_PUBLIC_KEY=$(cat deployment_key.pub)" >> $GITHUB_ENV
+          # Store private key as output for next job
+          echo "ssh_private_key<<EOF" >> $GITHUB_OUTPUT
+          cat deployment_key >> $GITHUB_OUTPUT  
+          echo "EOF" >> $GITHUB_OUTPUT
+        id: ssh-key
 
       - name: Terraform Init
         run: terraform init
@@ -113,10 +126,17 @@ jobs:
           terraform plan \
             -var-file="${{ needs.setup.outputs.terraform-env }}.tfvars" \
             -var="image_tag=${{ needs.setup.outputs.image-tag }}" \
+            -var="deployment_public_key=$SSH_PUBLIC_KEY" \
             -out=tfplan
 
       - name: Terraform Apply
         run: terraform apply tfplan
+
+      - name: Get deployment info
+        id: terraform-output
+        run: |
+          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
+          echo "ecr_repo_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
 
       - name: Output deployment info
         run: |
@@ -124,43 +144,87 @@ jobs:
           echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Terraform Workspace**: ${{ needs.setup.outputs.terraform-env }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Image Tag**: ${{ needs.setup.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Instance IP**: $(terraform output -raw instance_public_ip)" >> $GITHUB_STEP_SUMMARY
-          echo "- **ECR Repository**: $(terraform output -raw ecr_repository_url)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance IP**: ${{ steps.terraform-output.outputs.instance_ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECR Repository**: ${{ steps.terraform-output.outputs.ecr_repo_url }}" >> $GITHUB_STEP_SUMMARY
 
-  # Test deployment (basic health check)
-  test-deployment:
+  # Deploy application to EC2 via SSH
+  deploy-app:
     runs-on: ubuntu-latest
-    needs: [setup, deploy]
+    needs: [setup, build-and-push, deploy]
     environment: ${{ needs.setup.outputs.environment }}
-    defaults:
-      run:
-        working-directory: devops/terraform/infrastructure
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "latest"
-
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials  
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Wait for deployment
+      - name: Wait for EC2 to be ready
         run: sleep 60
 
-      - name: Get instance info and test
+      - name: Deploy application via SSH
         run: |
-          # Initialize terraform in this context
-          terraform init
-          terraform workspace select ${{ needs.setup.outputs.terraform-env }}
+          # Create SSH private key file
+          echo "${{ needs.deploy.outputs.ssh_private_key }}" > deployment_key
+          chmod 600 deployment_key
           
-          INSTANCE_IP=$(terraform output -raw instance_public_ip)
+          INSTANCE_IP="${{ needs.deploy.outputs.instance_ip }}"
+          ECR_REPO="${{ needs.deploy.outputs.ecr_repo_url }}"
+          IMAGE_TAG="${{ needs.setup.outputs.image-tag }}"
+          
+          echo "Deploying to $INSTANCE_IP"
+          
+          # SSH and deploy
+          ssh -o StrictHostKeyChecking=no -i deployment_key ubuntu@$INSTANCE_IP << EOF
+            set -e
+            
+            # Stop and remove existing container if it exists
+            sudo docker stop our-little-corner-app || true
+            sudo docker rm our-little-corner-app || true
+            
+            # Login to ECR
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | sudo docker login --username AWS --password-stdin $ECR_REPO
+            
+            # Pull latest image
+            sudo docker pull $ECR_REPO:$IMAGE_TAG
+            
+            # Run new container with environment variables
+            sudo docker run -d \
+              --name our-little-corner-app \
+              -p 80:3000 \
+              --restart unless-stopped \
+              -e NODE_ENV=production \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e APP_PASSWORD="${{ secrets.APP_PASSWORD }}" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -e NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e AWS_REGION="${{ env.AWS_REGION }}" \
+              -e S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}" \
+              -e NEXT_PUBLIC_FIREBASE_API_KEY="${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}" \
+              -e NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" \
+              -e NEXT_PUBLIC_FIREBASE_PROJECT_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" \
+              -e NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" \
+              -e NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" \
+              -e NEXT_PUBLIC_FIREBASE_APP_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}" \
+              -e FIREBASE_ADMIN_PROJECT_ID="${{ secrets.FIREBASE_ADMIN_PROJECT_ID }}" \
+              -e FIREBASE_ADMIN_CLIENT_EMAIL="${{ secrets.FIREBASE_ADMIN_CLIENT_EMAIL }}" \
+              -e FIREBASE_ADMIN_PRIVATE_KEY="${{ secrets.FIREBASE_ADMIN_PRIVATE_KEY }}" \
+              -e NEXTAUTH_URL="http://$INSTANCE_IP" \
+              -e NEXT_PUBLIC_APP_URL="http://$INSTANCE_IP" \
+              $ECR_REPO:$IMAGE_TAG
+              
+            echo "Container started successfully"
+          EOF
+          
+          # Clean up SSH key
+          rm deployment_key
+
+      - name: Health check
+        run: |
+          INSTANCE_IP="${{ needs.deploy.outputs.instance_ip }}"
           echo "Testing deployment at http://$INSTANCE_IP"
           
           # Wait for the application to be ready (up to 5 minutes)
@@ -177,12 +241,12 @@ jobs:
           if curl -f -s "http://$INSTANCE_IP/api/health"; then
             echo "🎉 Deployment successful!"
             echo "Application is available at: http://$INSTANCE_IP"
-            echo "## Health Check Results" >> $GITHUB_STEP_SUMMARY
+            echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
             echo "✅ **Application Status**: Healthy" >> $GITHUB_STEP_SUMMARY
             echo "🌐 **Application URL**: http://$INSTANCE_IP" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ Health check failed"
-            echo "## Health Check Results" >> $GITHUB_STEP_SUMMARY
+            echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
             echo "❌ **Application Status**: Failed" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
