@@ -87,7 +87,7 @@ resource "aws_db_instance" "postgres" {
   
   # Engine configuration
   engine         = "postgres"
-  engine_version = "15.4"
+  engine_version = "15"  # Use latest available PostgreSQL 15 minor version
   instance_class = var.db_instance_class
   
   # Database configuration
