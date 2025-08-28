@@ -227,22 +227,22 @@ jobs:
           echo "🚀 Starting deployment"
           
           # SSH and deploy
-          ssh -o StrictHostKeyChecking=no -i deployment_key ubuntu@$INSTANCE_IP << EOF
+          ssh -o StrictHostKeyChecking=no -i deployment_key ubuntu@$INSTANCE_IP << 'DEPLOY_EOF'
             set -e
             
-            # Set ECR repository URL
+            # Set ECR repository URL and image tag
             ECR_REPO="${{ needs.deploy.outputs.ecr_repo_url }}"
             IMAGE_TAG="${{ needs.setup.outputs.image-tag }}"
+            
+            echo "🐳 Deploying image: $ECR_REPO:$IMAGE_TAG"
             
             # Ensure Docker daemon is running
             echo "🐳 Ensuring Docker daemon is running..."
             sudo systemctl start docker
             sudo systemctl enable docker
             
-            # Add ubuntu user to docker group if not already (and refresh groups)
+            # Add ubuntu user to docker group if not already
             sudo usermod -aG docker ubuntu
-            # Use newgrp to refresh group membership for current session
-            newgrp docker << 'DOCKER_COMMANDS'
             
             # Stop and remove existing container if it exists
             docker stop our-little-corner-app || true
@@ -250,26 +250,32 @@ jobs:
             
             # Get database credentials from AWS Secrets Manager on the EC2 instance
             echo "🔐 Getting database credentials from AWS Secrets Manager..."
-            DB_SECRETS=\$(aws secretsmanager get-secret-value --secret-id ${{ needs.deploy.outputs.secrets_manager_secret_name }} --region ${{ env.AWS_REGION }} --query SecretString --output text)
+            DB_SECRETS=$(aws secretsmanager get-secret-value --secret-id ${{ needs.deploy.outputs.secrets_manager_secret_name }} --region ${{ env.AWS_REGION }} --query SecretString --output text)
             
             # Check if jq is available, if not use python as fallback
             if command -v jq >/dev/null 2>&1; then
               echo "Using jq to parse credentials"
-              DB_PASSWORD=\$(echo "\$DB_SECRETS" | jq -r .password)
+              DB_PASSWORD=$(echo "$DB_SECRETS" | jq -r .password)
             else
               echo "jq not found, using python as fallback"
-              DB_PASSWORD=\$(echo "\$DB_SECRETS" | python3 -c "import sys, json; print(json.load(sys.stdin)['password'])")
+              DB_PASSWORD=$(echo "$DB_SECRETS" | python3 -c "import sys, json; print(json.load(sys.stdin)['password'])")
             fi
             
-            DATABASE_URL="postgresql://postgres:\$DB_PASSWORD@${{ needs.deploy.outputs.rds_endpoint }}/${{ needs.deploy.outputs.rds_database_name }}"
+            DATABASE_URL="postgresql://postgres:$DB_PASSWORD@${{ needs.deploy.outputs.rds_endpoint }}/${{ needs.deploy.outputs.rds_database_name }}"
+            
+            # Extract ECR registry URL for login (remove repository name and tag)
+            ECR_REGISTRY=$(echo $ECR_REPO | cut -d'/' -f1)
             
             # Login to ECR
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin \$ECR_REPO
+            echo "🔑 Logging into ECR registry: $ECR_REGISTRY"
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY
             
             # Pull latest image
-            docker pull \$ECR_REPO:\$IMAGE_TAG
+            echo "📥 Pulling Docker image: $ECR_REPO:$IMAGE_TAG"
+            docker pull $ECR_REPO:$IMAGE_TAG
             
             # Run new container with environment variables
+            echo "🚀 Starting container..."
             docker run -d \
               --name our-little-corner-app \
               -p 80:3000 \
@@ -294,14 +300,11 @@ jobs:
               -e FIREBASE_ADMIN_PRIVATE_KEY="${{ secrets.FIREBASE_ADMIN_PRIVATE_KEY }}" \
               -e NEXTAUTH_URL="http://${{ needs.deploy.outputs.instance_ip }}" \
               -e NEXT_PUBLIC_APP_URL="http://${{ needs.deploy.outputs.instance_ip }}" \
-              \$ECR_REPO:\$IMAGE_TAG
+              $ECR_REPO:$IMAGE_TAG
               
-            echo "Container started successfully"
+            echo "✅ Container started successfully"
             
-            # Exit the newgrp docker subshell
-            DOCKER_COMMANDS
-            
-          EOF
+DEPLOY_EOF
           
           # Clean up SSH key
           rm deployment_key
