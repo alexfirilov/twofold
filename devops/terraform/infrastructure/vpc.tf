@@ -42,6 +42,11 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# Get availability zones for the current region
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 # Private subnets for RDS (in different AZs for multi-AZ support)
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
