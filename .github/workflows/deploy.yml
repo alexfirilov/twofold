@@ -231,7 +231,7 @@ jobs:
             set -e
             
             # Set ECR repository URL
-            ECR_REPO="${{ needs.deploy.outputs.ecr_repository_url }}"
+            ECR_REPO="${{ needs.deploy.outputs.ecr_repo_url }}"
             IMAGE_TAG="${{ needs.setup.outputs.image-tag }}"
             
             # Ensure Docker daemon is running
@@ -261,7 +261,7 @@ jobs:
               DB_PASSWORD=\$(echo "\$DB_SECRETS" | python3 -c "import sys, json; print(json.load(sys.stdin)['password'])")
             fi
             
-            DATABASE_URL="postgresql://postgres:\$DB_PASSWORD@${{ needs.deploy.outputs.rds_endpoint }}:5432/${{ needs.deploy.outputs.rds_database_name }}"
+            DATABASE_URL="postgresql://postgres:\$DB_PASSWORD@${{ needs.deploy.outputs.rds_endpoint }}/${{ needs.deploy.outputs.rds_database_name }}"
             
             # Login to ECR
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin \$ECR_REPO
