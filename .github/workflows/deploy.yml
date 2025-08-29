@@ -11,6 +11,7 @@ on:
           - DEV
           - STAGE
           - PROD
+        default: DEV
 
 env:
   AWS_REGION: il-central-1
@@ -27,12 +28,24 @@ jobs:
       - name: Set environment variables
         id: set-env
         run: |
-          # Convert GitHub Environment name to lowercase for Terraform workspace
-          ENV_LOWER=$(echo "${{ github.event.inputs.environment }}" | tr '[:upper:]' '[:lower:]')
+          # Determine environment: use input if available, otherwise default to DEV
+          if [ "${{ github.event.inputs.environment }}" != "" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            ENVIRONMENT="DEV"
+            echo "⚠️ No environment input provided, defaulting to DEV"
+          fi
           
-          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          # Convert GitHub Environment name to lowercase for Terraform workspace
+          ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "terraform-env=$ENV_LOWER" >> $GITHUB_OUTPUT
           echo "image-tag=$ENV_LOWER-${{ github.sha }}" >> $GITHUB_OUTPUT
+          
+          echo "🎯 Environment: $ENVIRONMENT"
+          echo "🏗️ Terraform workspace: $ENV_LOWER" 
+          echo "🏷️ Image tag: $ENV_LOWER-${{ github.sha }}"
 
   # Build and push Docker image to ECR
   build-and-push:
@@ -383,8 +396,8 @@ DEPLOY_EOF
             
             if [ $attempt -eq $max_attempts ]; then
               echo "❌ Maximum attempts reached. Application failed to become healthy."
-              echo "📋 Checking container status on remote instance..."
-              ssh -o StrictHostKeyChecking=no -i deployment_key ubuntu@$INSTANCE_IP "docker ps -a && docker logs our-little-corner-app --tail=50" || true
+              echo "📋 Application failed to respond to health checks after $max_attempts attempts"
+              # Note: SSH key was cleaned up in previous step, cannot check remote container status
               echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
               echo "❌ **Application Status**: Failed after $max_attempts attempts" >> $GITHUB_STEP_SUMMARY
               echo "⏱️ **Total Wait Time**: $((max_attempts * wait_time / 60)) minutes" >> $GITHUB_STEP_SUMMARY
