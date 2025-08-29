@@ -36,16 +36,6 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
   }
 }
 
-# Enhanced database secrets with connection URL
-resource "aws_secretsmanager_secret_version" "db_credentials" {
-  secret_id = aws_secretsmanager_secret.db_credentials.id
-  secret_string = jsonencode({
-    username     = "postgres"
-    password     = random_password.db_password.result
-    engine       = "postgres"
-    host         = aws_db_instance.main.endpoint
-    port         = 5432
-    dbname       = aws_db_instance.main.db_name
-    database_url = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}"
-  })
-}
+# Note: Enhanced database secrets with connection URL are managed in rds.tf
+# The existing aws_secretsmanager_secret_version.db_credentials resource in rds.tf
+# already contains the necessary database connection information for ECS tasks
