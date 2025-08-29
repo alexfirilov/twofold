@@ -13,3 +13,37 @@ README.md
 .vercel
 .DS_Store
 *.log
+
+# Development files
+docs/
+qa/
+scripts/
+devops/
+terraform.tfstate*
+.terraform/
+*.tfvars
+.github/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+.cache/
+
+# Build artifacts
+build/
+dist/
+uploads/
+
+# Misc
+*.tgz
+*.tar.gz

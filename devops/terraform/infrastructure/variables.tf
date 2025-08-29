@@ -102,3 +102,14 @@ variable "db_max_connections" {
   type        = string
   default     = "100"
 }
+
+# ECS Variables
+variable "public_subnet_b_cidr_block" {
+  description = "The CIDR block for the second public subnet (for ALB)"
+  type        = string
+}
+
+variable "s3_bucket_name" {
+  description = "The name of the S3 bucket for media storage"
+  type        = string
+}

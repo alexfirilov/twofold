@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Environment & MCP Integration
+
+### Current Environment
+- **Active Environment**: Development (dev)
+- **Credentials Location**: `.env` file in project root (contains AWS credentials and other secrets)
+- **GitHub Integration**: Use GitHub MCP server for repository operations
+
+### Required Workflow
+1. **Documentation**: Always document work progress and decisions in GitHub issues
+2. **GitHub Actions**: Manually trigger workflows when appropriate for the dev environment
+3. **Infrastructure**: Use Terraform commands for dev environment infrastructure management
+4. **MCP Usage**: Leverage available MCP servers, especially GitHub MCP for repository access and management
+
+### GitHub Integration Commands
+- Create/update issues to track development work
+- Reference relevant GitHub Actions workflows
+- Use GitHub MCP to access repository data and manage issues/PRs
+
 ## Plan & Review
 
 ### Before starting work
@@ -29,7 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Storage**: Amazon S3 for media files with presigned URLs
 - **Authentication**: Firebase Auth + fallback password/session system (JWT)
 - **Multi-tenancy**: Corner-based isolation with invite system
-- **Deployment**: Docker Compose with separate app and database containers
+- **Deployment**: AWS ECS with EC2 + Application Load Balancer (primary) or Docker Compose (local dev)
 
 ## Development Commands
 
@@ -58,8 +76,26 @@ docker-compose up -d db                # Start only database
 npm run dev                            # Run development server
 
 # Testing
-# Note: No test framework is currently configured
-# Recommend adding Jest or Vitest for unit testing
+# QA Framework (available in qa/ directory)
+cd qa/automated-tests && npm install  # Install test dependencies
+cd qa/automated-tests && npm test     # Run all tests
+npm run test:unit                     # Run unit tests
+npm run test:integration              # Run integration tests
+npm run test:e2e                      # Run end-to-end tests
+
+# Infrastructure Testing
+cd devops/terraform/infrastructure && terraform plan -var-file="dev.tfvars"
+
+# ECS Deployment (Recommended)
+# Deploy with ECS cluster, ALB, and managed scaling
+gh workflow run deploy-ecs.yml --ref main -f environment=DEV
+
+# Legacy EC2 Deployment
+# Deploy to single EC2 instance (legacy method)
+gh workflow run deploy.yml --ref main -f environment=DEV
+
+# ECS Validation
+./scripts/validate-ecs-deployment.sh -e dev  # Validate ECS deployment
 ```
 
 ## Key Directory Structure
@@ -132,6 +168,18 @@ app/
 ├── settings/          # User settings pages
 │   └── page.tsx       # Settings interface
 └── middleware.ts      # Route protection and security headers
+├── devops/               # Infrastructure and deployment
+│   └── terraform/        # AWS infrastructure as code
+│       ├── bootstrap/    # Terraform state management setup
+│       └── infrastructure/ # Main application infrastructure
+├── qa/                   # Testing framework
+│   └── automated-tests/  # Unit, integration, and e2e tests
+├── scripts/              # Setup and utility scripts
+│   ├── setup.sh          # Environment setup script
+│   └── startup.js        # Application startup script
+└── database/             # Database schemas and migrations
+    ├── multi-tenant-schema.sql
+    └── fix-orphaned-media.sql
 ```
 
 ## Database Schema
@@ -334,11 +382,23 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ## Testing & Quality
 
+### Code Quality
 - Use `npm run lint` to check code quality
+- TypeScript type checking is built into Next.js build process
 - Verify database health with `/api/health` endpoint
+
+### Testing Framework (qa/automated-tests/)
+The project includes a testing framework with:
+- **Unit Tests**: Component and utility function tests (`qa/automated-tests/unit/`)
+- **Integration Tests**: API endpoint and database integration tests (`qa/automated-tests/integration/`)
+- **E2E Tests**: Full user workflow testing (`qa/automated-tests/e2e/`)
+
+### Manual Testing Workflows
 - Test file uploads end-to-end (presigned URL → S3 → database)
 - Validate authentication flows and session persistence
 - Check responsive design across devices
+- Test memory group locking/unlocking functionality
+- Verify multi-tenant data isolation
 
 ## Important Implementation Details
 
@@ -443,3 +503,42 @@ The app requires both client-side and server-side Firebase configuration:
 - Client config in `app/lib/firebase/config.ts` for browser authentication
 - Server config in `app/lib/firebase/admin.ts` for token validation
 - Middleware integration via `next-firebase-auth-edge` for session management
+
+## Infrastructure & Deployment
+
+### AWS Infrastructure (devops/terraform/)
+The project includes complete Terraform infrastructure for AWS deployment:
+
+```bash
+# Terraform Commands (from devops/terraform/infrastructure/)
+terraform init                                  # Initialize Terraform
+terraform workspace new dev                     # Create development workspace
+terraform workspace select dev                  # Switch to development
+terraform plan -var-file="dev.tfvars"          # Plan infrastructure changes
+terraform apply -var-file="dev.tfvars"         # Deploy infrastructure
+terraform output                                # Get deployment info (URLs, IPs)
+terraform destroy -var-file="dev.tfvars"       # Clean up environment
+```
+
+### Infrastructure Components
+- **VPC**: Isolated network per environment (dev/stage/prod)
+- **ECS**: Container orchestration with EC2 capacity provider (primary deployment)
+- **ALB**: Application Load Balancer for traffic distribution and health checks
+- **EC2**: Auto Scaling Group for ECS cluster instances
+- **ECR**: Container registry for application images
+- **RDS**: PostgreSQL database (replaces containerized DB in production)
+- **Secrets Manager**: Secure storage for application and database credentials
+- **Security Groups**: ALB-to-ECS and database access configuration
+- **IAM Roles**: ECS task execution and application permissions
+
+### Environment Management
+- **Workspaces**: dev, stage, prod environments with isolated resources
+- **State Management**: S3 backend with DynamoDB locking
+- **Configuration**: Environment-specific .tfvars files
+
+### Setup Scripts
+```bash
+# Initial environment setup
+./scripts/setup.sh                             # Run initial setup script
+node scripts/startup.js                        # Run application startup script
+```

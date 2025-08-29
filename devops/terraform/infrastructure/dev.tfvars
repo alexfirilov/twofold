@@ -5,6 +5,9 @@ aws_region = "il-central-1"
 vpc_cidr_block    = "10.0.0.0/16"
 subnet_cidr_block = "10.0.1.0/24"
 
+# ECS/ALB Configuration
+public_subnet_b_cidr_block = "10.0.2.0/24"
+
 # Private subnets for RDS
 private_subnet_a_cidr_block = "10.0.10.0/24"
 private_subnet_b_cidr_block = "10.0.11.0/24"
@@ -29,3 +32,6 @@ db_performance_insights_enabled = false
 db_monitoring_interval = 0
 db_deletion_protection = false
 db_max_connections = "100"
+
+# S3 Configuration
+s3_bucket_name = "our-little-corner-dev-media"

@@ -1,15 +1,19 @@
 # Multi-stage build for optimal image size
 FROM node:18-alpine AS base
 
+# Install security updates and required packages
+RUN apk update && apk upgrade && apk add --no-cache \
+    libc6-compat \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
-
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --omit=dev --legacy-peer-deps --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -18,9 +22,9 @@ WORKDIR /app
 # Copy package files for full install
 COPY package.json package-lock.json* ./
 # Install all dependencies including dev dependencies for build
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps --frozen-lockfile
 
-# Copy source code
+# Copy source code (excluding unnecessary files via .dockerignore)
 COPY . .
 
 # Accept Firebase environment variables for build
@@ -68,4 +72,10 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "server.js"]

@@ -1,0 +1,318 @@
+name: Deploy to AWS ECS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - DEV
+          - STAGE
+          - PROD
+        default: DEV
+
+env:
+  AWS_REGION: il-central-1
+
+jobs:
+  # Setup job to prepare environment variables
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      terraform-env: ${{ steps.set-env.outputs.terraform-env }}
+      image-tag: ${{ steps.set-env.outputs.image-tag }}
+    steps:
+      - name: Set environment variables
+        id: set-env
+        run: |
+          # Determine environment: use input if available, otherwise default to DEV
+          if [ "${{ github.event.inputs.environment }}" != "" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            ENVIRONMENT="DEV"
+            echo "⚠️ No environment input provided, defaulting to DEV"
+          fi
+          
+          # Convert GitHub Environment name to lowercase for Terraform workspace
+          ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "terraform-env=$ENV_LOWER" >> $GITHUB_OUTPUT
+          echo "image-tag=$ENV_LOWER-${{ github.sha }}" >> $GITHUB_OUTPUT
+          
+          echo "🎯 Environment: $ENVIRONMENT"
+          echo "🏗️ Terraform workspace: $ENV_LOWER" 
+          echo "🏷️ Image tag: $ENV_LOWER-${{ github.sha }}"
+
+  # Build and push Docker image to ECR
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: setup
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ needs.setup.outputs.terraform-env }}-app
+          IMAGE_TAG: ${{ needs.setup.outputs.image-tag }}
+        run: |
+          # Build Docker image with build args for Firebase config
+          docker build \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY="${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID="${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.setup.outputs.terraform-env }}-latest .
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ needs.setup.outputs.terraform-env }}-latest
+
+  # Deploy infrastructure with Terraform
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-push]
+    environment: ${{ needs.setup.outputs.environment }}
+    outputs:
+      cluster_name: ${{ steps.terraform-output.outputs.cluster_name }}
+      service_name: ${{ steps.terraform-output.outputs.service_name }}
+      alb_dns_name: ${{ steps.terraform-output.outputs.alb_dns_name }}
+      app_secrets_name: ${{ steps.terraform-output.outputs.app_secrets_name }}
+    defaults:
+      run:
+        working-directory: devops/terraform/infrastructure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "latest"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Generate SSH key for deployment
+        run: |
+          ssh-keygen -t rsa -b 4096 -f deployment_key -N "" -C "github-actions-${{ needs.setup.outputs.terraform-env }}"
+          echo "SSH_PUBLIC_KEY=$(cat deployment_key.pub)" >> $GITHUB_ENV
+        id: ssh-key
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Workspace
+        run: |
+          # Create workspace if it doesn't exist, otherwise select it
+          terraform workspace select ${{ needs.setup.outputs.terraform-env }} || terraform workspace new ${{ needs.setup.outputs.terraform-env }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var-file="${{ needs.setup.outputs.terraform-env }}.tfvars" \
+            -var="image_tag=${{ needs.setup.outputs.image-tag }}" \
+            -var="deployment_public_key=$SSH_PUBLIC_KEY" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply tfplan
+
+      - name: Get deployment info
+        id: terraform-output
+        run: |
+          echo "cluster_name=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+          echo "service_name=$(terraform output -raw ecs_service_name)" >> $GITHUB_OUTPUT
+          echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+          echo "app_secrets_name=$(terraform output -raw app_secrets_name)" >> $GITHUB_OUTPUT
+
+  # Update secrets in AWS Secrets Manager
+  update-secrets:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-infrastructure]
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update application secrets
+        run: |
+          SECRET_NAME="${{ needs.deploy-infrastructure.outputs.app_secrets_name }}"
+          ALB_DNS_NAME="${{ needs.deploy-infrastructure.outputs.alb_dns_name }}"
+          
+          # Create the secrets JSON
+          SECRETS_JSON=$(jq -n \
+            --arg app_password "${{ secrets.APP_PASSWORD }}" \
+            --arg jwt_secret "${{ secrets.JWT_SECRET }}" \
+            --arg nextauth_secret "${{ secrets.NEXTAUTH_SECRET }}" \
+            --arg aws_access_key_id "${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            --arg aws_secret_access_key "${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            --arg s3_bucket_name "${{ secrets.S3_BUCKET_NAME }}" \
+            --arg firebase_api_key "${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}" \
+            --arg firebase_auth_domain "${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" \
+            --arg firebase_project_id "${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" \
+            --arg firebase_storage_bucket "${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" \
+            --arg firebase_messaging_sender_id "${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" \
+            --arg firebase_app_id "${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}" \
+            --arg firebase_admin_project_id "${{ secrets.FIREBASE_ADMIN_PROJECT_ID }}" \
+            --arg firebase_admin_client_email "${{ secrets.FIREBASE_ADMIN_CLIENT_EMAIL }}" \
+            --arg firebase_admin_private_key "${{ secrets.FIREBASE_ADMIN_PRIVATE_KEY }}" \
+            --arg nextauth_url "http://$ALB_DNS_NAME" \
+            --arg next_public_app_url "http://$ALB_DNS_NAME" \
+            '{
+              "APP_PASSWORD": $app_password,
+              "JWT_SECRET": $jwt_secret,
+              "NEXTAUTH_SECRET": $nextauth_secret,
+              "AWS_ACCESS_KEY_ID": $aws_access_key_id,
+              "AWS_SECRET_ACCESS_KEY": $aws_secret_access_key,
+              "S3_BUCKET_NAME": $s3_bucket_name,
+              "NEXT_PUBLIC_FIREBASE_API_KEY": $firebase_api_key,
+              "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": $firebase_auth_domain,
+              "NEXT_PUBLIC_FIREBASE_PROJECT_ID": $firebase_project_id,
+              "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": $firebase_storage_bucket,
+              "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": $firebase_messaging_sender_id,
+              "NEXT_PUBLIC_FIREBASE_APP_ID": $firebase_app_id,
+              "FIREBASE_ADMIN_PROJECT_ID": $firebase_admin_project_id,
+              "FIREBASE_ADMIN_CLIENT_EMAIL": $firebase_admin_client_email,
+              "FIREBASE_ADMIN_PRIVATE_KEY": $firebase_admin_private_key,
+              "NEXTAUTH_URL": $nextauth_url,
+              "NEXT_PUBLIC_APP_URL": $next_public_app_url
+            }')
+          
+          # Update the secret
+          aws secretsmanager update-secret \
+            --secret-id "$SECRET_NAME" \
+            --secret-string "$SECRETS_JSON" \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ Updated application secrets in Secrets Manager"
+
+  # Deploy application to ECS
+  deploy-app:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-infrastructure, update-secrets]
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update ECS service
+        run: |
+          CLUSTER_NAME="${{ needs.deploy-infrastructure.outputs.cluster_name }}"
+          SERVICE_NAME="${{ needs.deploy-infrastructure.outputs.service_name }}"
+          
+          echo "🚀 Forcing new deployment for ECS service: $SERVICE_NAME in cluster: $CLUSTER_NAME"
+          
+          # Force new deployment to pick up the updated secrets and new image
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ ECS service update initiated"
+
+      - name: Wait for deployment to complete
+        run: |
+          CLUSTER_NAME="${{ needs.deploy-infrastructure.outputs.cluster_name }}"
+          SERVICE_NAME="${{ needs.deploy-infrastructure.outputs.service_name }}"
+          
+          echo "⏳ Waiting for ECS service to stabilize..."
+          
+          # Wait for the service to become stable (up to 15 minutes)
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME" \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ ECS service deployment completed successfully"
+
+      - name: Health check
+        run: |
+          ALB_DNS_NAME="${{ needs.deploy-infrastructure.outputs.alb_dns_name }}"
+          echo "Testing deployment at http://$ALB_DNS_NAME"
+          
+          # Function to check if application is responding
+          check_health() {
+            local response=$(curl -s -w "%{http_code}" "http://$ALB_DNS_NAME/api/health" -o /tmp/health_response.txt)
+            local status_code="${response: -3}"
+            
+            if [ "$status_code" = "200" ]; then
+              return 0
+            else
+              echo "Health check failed with status: $status_code"
+              if [ -f /tmp/health_response.txt ]; then
+                echo "Response body: $(cat /tmp/health_response.txt)"
+              fi
+              return 1
+            fi
+          }
+          
+          # Wait for the application to be ready (up to 10 minutes)
+          max_attempts=30
+          attempt=1
+          wait_time=20
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔍 Health check attempt $attempt/$max_attempts..."
+            
+            if check_health; then
+              echo "✅ Application is healthy!"
+              break
+            fi
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Maximum attempts reached. Application failed to become healthy."
+              exit 1
+            fi
+            
+            echo "⏳ Waiting ${wait_time}s before next attempt..."
+            sleep $wait_time
+            attempt=$((attempt + 1))
+          done
+          
+          # Get application info for summary
+          app_info=$(curl -s "http://$ALB_DNS_NAME/api/health" | head -c 200 || echo "Could not fetch app info")
+          
+          echo "🎉 Deployment successful!"
+          echo "Application is available at: http://$ALB_DNS_NAME"
+          echo "## 🚀 ECS Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Application Status**: Healthy" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **Application URL**: http://$ALB_DNS_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "⏱️ **Health Check Attempts**: $attempt/$max_attempts" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Application Info**: \`$app_info\`" >> $GITHUB_STEP_SUMMARY
+          echo "🐳 **Image Tag**: ${{ needs.setup.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "🏗️ **ECS Cluster**: ${{ needs.deploy-infrastructure.outputs.cluster_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **ECS Service**: ${{ needs.deploy-infrastructure.outputs.service_name }}" >> $GITHUB_STEP_SUMMARY
