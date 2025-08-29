@@ -330,15 +330,20 @@ jobs:
             echo "🔧 Ensuring Docker daemon access..."
             if ! docker info >/dev/null 2>&1; then
               echo "⚠️ Docker access issue detected. Using sudo for Docker commands."
-              DOCKER_CMD="sudo docker"
+              USE_SUDO=true
             else
-              DOCKER_CMD="docker"
+              USE_SUDO=false
             fi
             echo "✅ Docker command setup complete"
             
             # Stop and remove existing container if it exists  
-            $DOCKER_CMD stop our-little-corner-app || true
-            $DOCKER_CMD rm our-little-corner-app || true
+            if [ "$USE_SUDO" = "true" ]; then
+              sudo docker stop our-little-corner-app || true
+              sudo docker rm our-little-corner-app || true
+            else
+              docker stop our-little-corner-app || true
+              docker rm our-little-corner-app || true
+            fi
             
             # Get database credentials from AWS Secrets Manager on the EC2 instance with retry logic
             echo "🔐 Getting database credentials from AWS Secrets Manager..."
@@ -347,6 +352,7 @@ jobs:
             max_retries=3
             retry_count=0
             DB_SECRETS=""
+            secrets_success=false
             
             while [ $retry_count -lt $max_retries ]; do
               echo "Attempting to retrieve secrets (attempt $((retry_count + 1))/$max_retries)..."
@@ -399,15 +405,27 @@ jobs:
             
             # Login to ECR
             echo "🔑 Logging into ECR registry: $ECR_REGISTRY"
-            aws ecr get-login-password --region ${AWS_REGION} | $DOCKER_CMD login --username AWS --password-stdin $ECR_REGISTRY
+            if [ "$USE_SUDO" = "true" ]; then
+              aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
+            else
+              aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin $ECR_REGISTRY
+            fi
             
             # Pull latest image
             echo "📥 Pulling Docker image: $ECR_REPO:$IMAGE_TAG"
-            $DOCKER_CMD pull $ECR_REPO:$IMAGE_TAG
+            if [ "$USE_SUDO" = "true" ]; then
+              sudo docker pull $ECR_REPO:$IMAGE_TAG
+            else
+              docker pull $ECR_REPO:$IMAGE_TAG
+            fi
             
             # Run new container with environment variables
             echo "🚀 Starting container..."
-            $DOCKER_CMD run -d \
+            if [ "$USE_SUDO" = "true" ]; then
+              sudo docker run -d \
+            else
+              docker run -d \
+            fi \
               --name our-little-corner-app \
               -p 80:3000 \
               --restart unless-stopped \
