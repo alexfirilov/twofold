@@ -277,13 +277,36 @@ jobs:
             
             echo "🐳 Deploying image: $ECR_REPO:$IMAGE_TAG"
             
-            # Ensure Docker daemon is running
-            echo "🐳 Ensuring Docker daemon is running..."
-            sudo systemctl start docker
-            sudo systemctl enable docker
+            # Wait briefly for user-data script completion
+            echo "⏳ Ensuring system initialization is complete..."
+            sleep 5
             
-            # Add ubuntu user to docker group if not already
-            sudo usermod -aG docker ubuntu
+            # Ensure Docker daemon is running
+            echo "🐳 Checking Docker daemon status..."
+            if ! docker info >/dev/null 2>&1; then
+              echo "📋 Docker is not running. Checking systemd status..."
+              sudo systemctl status docker || true
+              echo "🔧 Attempting to start Docker daemon..."
+              if ! sudo systemctl start docker; then
+                echo "❌ Failed to start Docker. Checking logs..."
+                sudo journalctl -u docker.service --no-pager -l -n 20 || true
+                echo "🔍 Checking systemd dependencies..."
+                sudo systemctl list-dependencies docker.service || true
+                exit 1
+              fi
+              sudo systemctl enable docker
+              echo "✅ Docker daemon started successfully"
+            else
+              echo "✅ Docker daemon is already running"
+            fi
+            
+            # Ensure ubuntu user is in docker group (may already be done by user-data)
+            if ! groups ubuntu | grep -q docker; then
+              echo "🔧 Adding ubuntu user to docker group..."
+              sudo usermod -aG docker ubuntu
+            else
+              echo "✅ Ubuntu user is already in docker group"
+            fi
             
             # Stop and remove existing container if it exists
             docker stop our-little-corner-app || true
