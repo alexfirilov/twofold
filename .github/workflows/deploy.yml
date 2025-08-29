@@ -283,22 +283,39 @@ jobs:
             
             # Ensure Docker daemon is running
             echo "🐳 Checking Docker daemon status..."
-            if ! docker info >/dev/null 2>&1; then
-              echo "📋 Docker is not running. Checking systemd status..."
-              sudo systemctl status docker || true
-              echo "🔧 Attempting to start Docker daemon..."
-              if ! sudo systemctl start docker; then
-                echo "❌ Failed to start Docker. Checking logs..."
-                sudo journalctl -u docker.service --no-pager -l -n 20 || true
-                echo "🔍 Checking systemd dependencies..."
-                sudo systemctl list-dependencies docker.service || true
-                exit 1
+            
+            # First, wait a bit more for Docker to be fully ready
+            for i in {1..10}; do
+              if docker info >/dev/null 2>&1; then
+                echo "✅ Docker daemon is running and ready"
+                break
               fi
-              sudo systemctl enable docker
-              echo "✅ Docker daemon started successfully"
-            else
-              echo "✅ Docker daemon is already running"
-            fi
+              if [ $i -eq 10 ]; then
+                echo "📋 Docker is not responding. Checking systemd status..."
+                sudo systemctl status docker || true
+                echo "🔧 Attempting to restart Docker daemon..."
+                sudo systemctl stop docker || true
+                sleep 2
+                if ! sudo systemctl start docker; then
+                  echo "❌ Failed to start Docker. Checking logs..."
+                  sudo journalctl -u docker.service --no-pager -l -n 20 || true
+                  echo "🔍 Checking systemd dependencies..."
+                  sudo systemctl list-dependencies docker.service || true
+                  exit 1
+                fi
+                sudo systemctl enable docker
+                echo "⏳ Waiting for Docker daemon to be ready after restart..."
+                sleep 5
+                if ! docker info >/dev/null 2>&1; then
+                  echo "❌ Docker daemon still not responding after restart"
+                  exit 1
+                fi
+                echo "✅ Docker daemon started successfully after restart"
+                break
+              fi
+              echo "⏳ Waiting for Docker daemon... (attempt $i/10)"
+              sleep 3
+            done
             
             # Ensure ubuntu user is in docker group (may already be done by user-data)
             if ! groups ubuntu | grep -q docker; then
