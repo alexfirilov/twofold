@@ -2,23 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Environment & MCP Integration
+## Development Environment & Workflow
 
-### Current Environment
-- **Active Environment**: Development (dev)
-- **Credentials Location**: `.env` file in project root (contains AWS credentials and other secrets)
-- **GitHub Integration**: Use GitHub MCP server for repository operations
+### Current Environment  
+- **Active Environment**: Development (dev branch)
+- **Credentials Location**: `.env` file in project root (contains AWS credentials and Firebase config)
+- **Database**: PostgreSQL via Docker Compose for local development
 
 ### Required Workflow
-1. **Documentation**: Always document work progress and decisions in GitHub issues
-2. **GitHub Actions**: Manually trigger workflows when appropriate for the dev environment
-3. **Infrastructure**: Use Terraform commands for dev environment infrastructure management
-4. **MCP Usage**: Leverage available MCP servers, especially GitHub MCP for repository access and management
-
-### GitHub Integration Commands
-- Create/update issues to track development work
-- Reference relevant GitHub Actions workflows
-- Use GitHub MCP to access repository data and manage issues/PRs
+1. **Documentation**: Track work progress in GitHub issues using MCP integration
+2. **Testing**: Run the full test suite before committing changes
+3. **Database**: Always verify database health after schema changes
+4. **Multi-tenant**: Ensure all new features respect corner-based tenant isolation
 
 ## Plan & Review
 
@@ -54,11 +49,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Development
 npm run dev          # Start development server
-npm run build        # Build for production
+npm run build        # Build for production  
 npm run start        # Start production server
 npm run lint         # Run ESLint
 
-# Docker Development
+# Docker Development (Primary)
 docker-compose up -d                    # Start all services
 docker-compose up -d --build           # Rebuild and start
 docker-compose logs -f app             # View app logs
@@ -69,33 +64,20 @@ docker-compose down                    # Stop all services
 docker-compose exec db pg_isready -U postgres -d our_little_corner  # Check DB health
 docker-compose exec db psql -U postgres -d our_little_corner        # Access DB shell
 
-# Local Development (without Docker)
+# Local Development (Alternative)
 npm install                             # Install dependencies
-cp .env.example .env.local             # Copy environment variables
+cp .env.example .env                   # Copy environment variables
 docker-compose up -d db                # Start only database
 npm run dev                            # Run development server
 
-# Testing
-# QA Framework (available in qa/ directory)
+# Testing (qa/automated-tests directory)
 cd qa/automated-tests && npm install  # Install test dependencies
 cd qa/automated-tests && npm test     # Run all tests
-npm run test:unit                     # Run unit tests
-npm run test:integration              # Run integration tests
-npm run test:e2e                      # Run end-to-end tests
-
-# Infrastructure Testing
-cd devops/terraform/infrastructure && terraform plan -var-file="dev.tfvars"
-
-# ECS Deployment (Recommended)
-# Deploy with ECS cluster, ALB, and managed scaling
-gh workflow run deploy-ecs.yml --ref main -f environment=DEV
-
-# Legacy EC2 Deployment
-# Deploy to single EC2 instance (legacy method)
-gh workflow run deploy.yml --ref main -f environment=DEV
-
-# ECS Validation
-./scripts/validate-ecs-deployment.sh -e dev  # Validate ECS deployment
+cd qa/automated-tests && npm run test:unit          # Unit tests only
+cd qa/automated-tests && npm run test:integration   # Integration tests only
+cd qa/automated-tests && npm run test:e2e           # End-to-end tests only
+cd qa/automated-tests && npm run test:watch         # Watch mode
+cd qa/automated-tests && npm run test:coverage      # With coverage report
 ```
 
 ## Key Directory Structure
@@ -257,44 +239,43 @@ app/
 
 ## Key Components & Patterns
 
-### Database Operations
-- Use connection pooling via `app/lib/db.ts`
-- All database functions are async and include proper error handling
-- **Multi-tenant isolation:** All queries include `corner_id` for tenant separation
-- **Corner operations:** `getAllCorners()`, `createCorner()`, `updateCorner()`, `deleteCorner()`, `getCornerBySlug()`
-- **Corner user operations:** `getCornerUsers()`, `addUserToCorner()`, `updateUserRole()`, `removeUserFromCorner()`
-- **Invite operations:** `createInvite()`, `getInviteByToken()`, `acceptInvite()`, `expireInvite()`
-- **Media operations:** `getAllMedia()`, `createMediaItem()`, `updateMediaItem()`, `deleteMediaItem()`
-- **Memory Group operations:** `getAllMemoryGroups()`, `createMemoryGroup()`, `updateMemoryGroup()`, `deleteMemoryGroup()`, `unlockMemoryGroup()`
-- **Session management:** `createSession()`, `getSessionByToken()`, `deleteSession()`
+### Database Operations (`app/lib/db.ts`)
+- Connection pooling with async/await error handling
+- **Multi-tenant isolation:** All queries MUST include `corner_id` for tenant separation
+- Key functions by domain:
+  - **Corners:** `getAllCorners()`, `createCorner()`, `updateCorner()`, `deleteCorner()`, `getCornerBySlug()`
+  - **Users:** `getCornerUsers()`, `addUserToCorner()`, `updateUserRole()`, `removeUserFromCorner()`
+  - **Invites:** `createInvite()`, `getInviteByToken()`, `acceptInvite()`, `expireInvite()`
+  - **Media:** `getAllMedia()`, `createMediaItem()`, `updateMediaItem()`, `deleteMediaItem()`
+  - **Memory Groups:** `getAllMemoryGroups()`, `createMemoryGroup()`, `updateMemoryGroup()`, `deleteMemoryGroup()`, `unlockMemoryGroup()`
+  - **Sessions:** `createSession()`, `getSessionByToken()`, `deleteSession()`
 
-### Authentication Flow
+### Authentication Architecture
 
-#### Firebase Authentication (Primary)
-1. User signs up/in with Firebase Auth (email/password or providers)
-2. Firebase ID token is validated server-side using Firebase Admin SDK
-3. User is automatically added to corners they have access to
-4. `AuthContext` manages Firebase auth state throughout the app
-5. `CornerContext` manages current corner selection and user role
+#### Dual Authentication System
+**Primary: Firebase Auth** (`app/lib/firebase/`)
+- Firebase client config in `config.ts`, server validation in `admin.ts`
+- ID token validation server-side using Firebase Admin SDK
+- `AuthContext` manages Firebase auth state, `CornerContext` manages corner selection
+- Users automatically linked to corners via invite system
 
-#### Fallback Password Authentication (Legacy/Guest)
-1. User enters corner password at `/login`
-2. API validates password and creates JWT session
-3. Session stored as HTTP-only cookie (`our-corner-session`)
-4. Middleware protects routes `/` and `/admin`
-5. API routes use `requireAuth()` from `lib/auth.ts`
+**Fallback: JWT Sessions** (`app/lib/auth.ts`)
+- Legacy password authentication for guest/shared access
+- JWT stored as HTTP-only cookie (`our-corner-session`)
+- Middleware protection on routes `/` and `/admin`
+- API routes use `requireAuth()` middleware
 
-#### Invite System
-1. Corner admin generates invite with email and permissions
-2. Invitee receives email with secure token link
-3. Link accepts invite and creates Firebase account if needed
-4. User is added to corner with specified role and permissions
+#### Multi-Tenant Invite Flow
+1. Corner admin generates invite via `/api/corner-invites` with email and permissions
+2. Invitee receives secure token link to `/invite/[code]`
+3. Acceptance creates Firebase account if needed and links to corner
+4. User gains access with specified role (admin/participant)
 
-### File Upload Process
+### File Upload Process (`app/lib/s3.ts`)
 1. Frontend requests presigned URL from `/api/upload`
-2. File uploaded directly to S3 using presigned URL
-3. Frontend sends metadata to `/api/media` to create database record
-4. S3 files are referenced by `s3_key` and accessed via `s3_url`
+2. Direct S3 upload using presigned URL (bypasses server)
+3. Frontend sends metadata to `/api/media` to create database record  
+4. Files referenced by `s3_key`, accessed via `s3_url` with corner isolation
 
 ### Design System
 
@@ -309,41 +290,40 @@ app/
 
 ## Environment Configuration
 
-Required environment variables in `.env`:
+Copy `.env.example` to `.env` and configure:
 
+**Database:**
 ```env
-# Database
 DATABASE_URL=postgresql://postgres:password@db:5432/our_little_corner
 POSTGRES_DB=our_little_corner
 POSTGRES_PASSWORD=secure_password
+```
 
-# Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+**Firebase (Both Client + Admin SDK):**
+```env
+# Client Configuration
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id  
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
-# Firebase Admin SDK (Server-side)
+# Admin SDK (Server-side)
 FIREBASE_ADMIN_PROJECT_ID=your-project-id
 FIREBASE_ADMIN_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
 FIREBASE_ADMIN_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
+```
 
-# Fallback Authentication (Legacy)
+**Legacy Auth + S3:**
+```env
 APP_PASSWORD=your_romantic_password
 JWT_SECRET=your_jwt_secret_minimum_32_characters
 NEXTAUTH_SECRET=your_nextauth_secret_minimum_32_characters
-
-# AWS S3
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_REGION=us-east-1
 S3_BUCKET_NAME=your-bucket-name
-
-# App URLs
-NEXTAUTH_URL=http://localhost:3000
-NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ## Security Features
@@ -506,39 +486,16 @@ The app requires both client-side and server-side Firebase configuration:
 
 ## Infrastructure & Deployment
 
-### AWS Infrastructure (devops/terraform/)
-The project includes complete Terraform infrastructure for AWS deployment:
-
+### Local Development (Primary)
 ```bash
-# Terraform Commands (from devops/terraform/infrastructure/)
-terraform init                                  # Initialize Terraform
-terraform workspace new dev                     # Create development workspace
-terraform workspace select dev                  # Switch to development
-terraform plan -var-file="dev.tfvars"          # Plan infrastructure changes
-terraform apply -var-file="dev.tfvars"         # Deploy infrastructure
-terraform output                                # Get deployment info (URLs, IPs)
-terraform destroy -var-file="dev.tfvars"       # Clean up environment
+# Docker Compose for full local stack
+docker-compose up -d --build    # Start PostgreSQL + App
+docker-compose logs -f          # Monitor services
+docker-compose down             # Stop services
 ```
 
-### Infrastructure Components
-- **VPC**: Isolated network per environment (dev/stage/prod)
-- **ECS**: Container orchestration with EC2 capacity provider (primary deployment)
-- **ALB**: Application Load Balancer for traffic distribution and health checks
-- **EC2**: Auto Scaling Group for ECS cluster instances
-- **ECR**: Container registry for application images
-- **RDS**: PostgreSQL database (replaces containerized DB in production)
-- **Secrets Manager**: Secure storage for application and database credentials
-- **Security Groups**: ALB-to-ECS and database access configuration
-- **IAM Roles**: ECS task execution and application permissions
-
-### Environment Management
-- **Workspaces**: dev, stage, prod environments with isolated resources
-- **State Management**: S3 backend with DynamoDB locking
-- **Configuration**: Environment-specific .tfvars files
-
-### Setup Scripts
-```bash
-# Initial environment setup
-./scripts/setup.sh                             # Run initial setup script
-node scripts/startup.js                        # Run application startup script
-```
+### Production Deployment
+- **Container Registry**: AWS ECR for Docker images
+- **Database**: AWS RDS PostgreSQL (replaces local containerized DB)
+- **Infrastructure**: Terraform modules in `devops/terraform/` (currently removed from active branch)
+- **Deployment**: Previous AWS ECS with ALB configuration available in git history
