@@ -31,15 +31,12 @@ resource "proxmox_lxc" "lxc-app" {
     password     = var.os.password
     target_node  = var.pve.node
     unprivileged = true
-    start        = true   # Start container by default for easier management
-    onboot       = false
-    force        = true   # Allow force operations
+    onboot       = true
     rootfs {
         size    = "8G"
         storage = "local-lvm"
     }
     
-    # Lifecycle management to handle provider limitations
     lifecycle {
         create_before_destroy = true
     }
