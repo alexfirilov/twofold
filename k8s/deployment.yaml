@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+  labels:
+    app: our-little-corner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: our-little-corner
+  template:
+    metadata:
+      labels:
+        app: our-little-corner
+    spec:
+      containers:
+      - name: our-little-corner
+        image: ghcr.io/alexfirilolv/our_little_corner:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
