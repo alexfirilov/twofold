@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: our-little-corner-config
+  namespace: default
+data:
+  # General Config
+  NODE_ENV: "development"
+  PORT: "3000"
+  POSTGRES_DB: "our_little_corner"
+  
+  # AWS Public Config
+  AWS_REGION: "us-east-1"
+  S3_BUCKET_NAME: "smartshopper-storage"
+
+  # App URLs
+  NEXTAUTH_URL: "http://10.100.102.39:3000"
+  NEXT_PUBLIC_APP_URL: "http://10.100.102.39:3000"
+
+  # Firebase Public Config
+  NEXT_PUBLIC_FIREBASE_API_KEY: "AIzaSyBFu1xv8CwOWfgb2XS1gbOwLMSs80hYdpc"
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "our-corner-52583.firebaseapp.com"
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: "our-corner-52583"
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "our-corner-52583.firebasestorage.app"
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "537832227213"
+  NEXT_PUBLIC_FIREBASE_APP_ID: "1:537832227213:web:7d8fd74e6b459a4ae3fdc4"
+  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: "G-FTYEX7GVWD"
+  
+  # Firebase Admin Config (Email/ID are generally considered config, not secret)
+  FIREBASE_ADMIN_PROJECT_ID: "our-corner-52583"
+  FIREBASE_ADMIN_CLIENT_EMAIL: "firebase-adminsdk-fbsvc@our-corner-52583.iam.gserviceaccount.com"
