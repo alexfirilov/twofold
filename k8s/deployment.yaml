@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: our-little-corner
-        image: ghcr.io/alexfirilolv/our_little_corner:0 # {"$imagepolicy": "flux-system:our-little-corner"}
+        image: ghcr.io/alexfirilolv/our_little_corner:1769614537 # {"$imagepolicy": "flux-system:our-little-corner"}
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
