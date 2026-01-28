@@ -31,4 +31,4 @@ spec:
     config:
       envoyGateway:
         gateway:
-          controllerName: envoy-controller
+          controllerName: gateway.envoyproxy.io/gatewayclass-controller
