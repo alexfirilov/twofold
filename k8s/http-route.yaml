@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: our-little-corner
+  namespace: default
+spec:
+  parentRefs:
+    - name: envoy-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - "corner.firilov.dev"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: our-little-corner-service
+          port: 80
