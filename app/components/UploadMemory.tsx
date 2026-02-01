@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
 import { useLocket } from '../contexts/LocketContext'
@@ -20,6 +20,15 @@ interface FileWithPreview {
   file: File
   preview: string
   id: string
+  latitude?: number
+  longitude?: number
+}
+
+interface PlaceSuggestion {
+  placeId: string
+  name: string
+  description: string
+  fullText: string
 }
 
 export default function UploadMemory({ isMilestone = false }: { isMilestone?: boolean }) {
@@ -35,8 +44,137 @@ export default function UploadMemory({ isMilestone = false }: { isMilestone?: bo
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [dateAutoFilled, setDateAutoFilled] = useState(false)
+  const [locationAutoFilled, setLocationAutoFilled] = useState(false)
+  const [isGeocodingLocation, setIsGeocodingLocation] = useState(false)
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const locationInputRef = useRef<HTMLInputElement>(null)
+  const suggestionsRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Get GPS coordinates from first file with location (for biasing autocomplete)
+  const getLocationBias = useCallback(() => {
+    const fileWithGps = files.find(f => f.latitude && f.longitude)
+    if (fileWithGps) {
+      return { lat: fileWithGps.latitude!, lng: fileWithGps.longitude! }
+    }
+    return undefined
+  }, [files])
+
+  // Fetch autocomplete suggestions
+  const fetchSuggestions = useCallback(async (input: string) => {
+    if (input.length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    setIsLoadingSuggestions(true)
+    try {
+      const { getCurrentUserToken } = await import('@/lib/firebase/auth')
+      const token = await getCurrentUserToken()
+
+      const res = await fetch('/api/places/autocomplete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          input,
+          locationBias: getLocationBias()
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setSuggestions(data.suggestions || [])
+        setShowSuggestions(data.suggestions?.length > 0)
+        setSelectedIndex(-1)
+      }
+    } catch (error) {
+      console.error('Autocomplete error:', error)
+    } finally {
+      setIsLoadingSuggestions(false)
+    }
+  }, [getLocationBias])
+
+  // Debounced location input handler
+  const handleLocationChange = (value: string) => {
+    setLocation(value)
+    setLocationAutoFilled(false)
+
+    // Clear previous debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+
+    // Debounce autocomplete requests
+    debounceRef.current = setTimeout(() => {
+      fetchSuggestions(value)
+    }, 300)
+  }
+
+  // Handle suggestion selection
+  const selectSuggestion = (suggestion: PlaceSuggestion) => {
+    // Use name + description for a nice format like "Mandoria, Rzgów"
+    const locationText = suggestion.description
+      ? `${suggestion.name}, ${suggestion.description}`
+      : suggestion.name
+    setLocation(locationText)
+    setSuggestions([])
+    setShowSuggestions(false)
+    setSelectedIndex(-1)
+  }
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : prev))
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1))
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+          selectSuggestion(suggestions[selectedIndex])
+        }
+        break
+      case 'Escape':
+        setShowSuggestions(false)
+        setSelectedIndex(-1)
+        break
+    }
+  }
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(e.target as Node) &&
+        locationInputRef.current &&
+        !locationInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
@@ -101,12 +239,48 @@ export default function UploadMemory({ isMilestone = false }: { isMilestone?: bo
                 f.id === item.id ? { ...f, latitude: lat, longitude: lon } : f
               ));
 
-              // 2. Auto-fill visible location text if empty
-              if (!location) {
-                // Format: "51.65, 19.48" (approx)
-                const latStr = typeof lat === 'number' ? lat.toFixed(4) : lat;
-                const lonStr = typeof lon === 'number' ? lon.toFixed(4) : lon;
-                setLocation(`${latStr}, ${lonStr}`);
+              // 2. Auto-fill visible location text if empty - use reverse geocoding
+              if (!location && !locationAutoFilled) {
+                setIsGeocodingLocation(true);
+                try {
+                  const { getCurrentUserToken } = await import('@/lib/firebase/auth');
+                  const token = await getCurrentUserToken();
+                  console.log('[Geocode] Calling API with:', { latitude: lat, longitude: lon });
+
+                  const geocodeRes = await fetch('/api/geocode', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ latitude: lat, longitude: lon })
+                  });
+
+                  const data = await geocodeRes.json();
+                  console.log('[Geocode] Response:', geocodeRes.status, data);
+
+                  if (geocodeRes.ok && data.success && data.location) {
+                    console.log('[Geocode] Success! Location:', data.location);
+                    setLocation(data.location);
+                    setLocationAutoFilled(true);
+                  } else {
+                    // Fallback to formatted coordinates
+                    console.log('[Geocode] Failed or no location, using coordinates. Error:', data.error);
+                    const latStr = typeof lat === 'number' ? lat.toFixed(4) : lat;
+                    const lonStr = typeof lon === 'number' ? lon.toFixed(4) : lon;
+                    setLocation(`${latStr}, ${lonStr}`);
+                    setLocationAutoFilled(true);
+                  }
+                } catch (geoError) {
+                  console.error('[Geocode] Exception:', geoError);
+                  // Fallback to formatted coordinates
+                  const latStr = typeof lat === 'number' ? lat.toFixed(4) : lat;
+                  const lonStr = typeof lon === 'number' ? lon.toFixed(4) : lon;
+                  setLocation(`${latStr}, ${lonStr}`);
+                  setLocationAutoFilled(true);
+                } finally {
+                  setIsGeocodingLocation(false);
+                }
               }
             }
 
@@ -362,16 +536,60 @@ export default function UploadMemory({ isMilestone = false }: { isMilestone?: bo
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#875e69] dark:text-[#dcb8c3] mb-2 font-display uppercase tracking-wider">Location</label>
+              <label className="block text-sm font-medium text-[#875e69] dark:text-[#dcb8c3] mb-2 font-display uppercase tracking-wider">
+                Location {locationAutoFilled && <span className="text-xs text-primary/50 normal-case">(from photo)</span>}
+              </label>
               <div className="relative">
                 <input
+                  ref={locationInputRef}
                   type="text"
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Where did this happen?"
-                  className="w-full bg-white dark:bg-[#2a1d21] border border-black/10 dark:border-white/10 rounded-xl p-4 pl-12 text-lg font-sans placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  onChange={(e) => handleLocationChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  placeholder={isGeocodingLocation ? "Finding location..." : "Where did this happen?"}
+                  disabled={isGeocodingLocation}
+                  autoComplete="off"
+                  className="w-full bg-white dark:bg-[#2a1d21] border border-black/10 dark:border-white/10 rounded-xl p-4 pl-12 text-lg font-sans placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
                 />
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/50 w-5 h-5 pointer-events-none" />
+                {isGeocodingLocation || isLoadingSuggestions ? (
+                  <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/50 w-5 h-5 pointer-events-none animate-spin" />
+                ) : (
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/50 w-5 h-5 pointer-events-none" />
+                )}
+
+                {/* Autocomplete Dropdown */}
+                {showSuggestions && suggestions.length > 0 && (
+                  <div
+                    ref={suggestionsRef}
+                    className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-[#2a1d21] border border-black/10 dark:border-white/10 rounded-xl shadow-lg overflow-hidden z-50"
+                  >
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={suggestion.placeId}
+                        type="button"
+                        onClick={() => selectSuggestion(suggestion)}
+                        className={`w-full px-4 py-3 text-left flex items-start gap-3 transition-colors ${
+                          index === selectedIndex
+                            ? 'bg-primary/10'
+                            : 'hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        <MapPin className="w-4 h-4 text-primary/50 mt-1 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-[#181113] dark:text-white truncate">
+                            {suggestion.name}
+                          </div>
+                          {suggestion.description && (
+                            <div className="text-sm text-[#875e69] dark:text-[#dcb8c3] truncate">
+                              {suggestion.description}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

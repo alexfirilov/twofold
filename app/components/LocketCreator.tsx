@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocket } from '../contexts/LocketContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Loader2, User, Pencil, Heart, Link, ArrowRight, Copy, Check, AlertCircle } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -51,7 +51,6 @@ export default function LocketCreator() {
     if (!avatarFile) return user?.photoURL || null
 
     try {
-      // Get presigned URL
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,7 +64,6 @@ export default function LocketCreator() {
       if (!res.ok) throw new Error('Failed to get upload URL')
       const { uploadUrl, publicUrl } = await res.json()
 
-      // Upload file to GCS
       const uploadRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': avatarFile.type },
@@ -101,7 +99,6 @@ export default function LocketCreator() {
     setError(null)
 
     try {
-      // 1. Upload Avatar & Update Profile
       const photoURL = await uploadAvatar()
       if (nickname !== user?.displayName || photoURL !== user?.photoURL) {
         await updateProfile({
@@ -110,36 +107,27 @@ export default function LocketCreator() {
         })
       }
 
-      // 2. Create Locket
       const newLocket = await createLocket({
         name: "Our Locket",
         admin_firebase_uid: user!.uid,
       })
 
-      // 3. Handle actions differently
-      // Note: createLocket already sets currentLocket and userRole in context,
-      // so we don't need to call switchLocket (which would fail due to React state timing)
-
       if (action === 'create' && partnerEmail) {
-        // Send email invite, then redirect
         await inviteUser({
           locket_id: newLocket.id,
           email: partnerEmail,
           invited_by_firebase_uid: user!.uid,
           role: 'admin'
         })
-        // Locket context already has the new locket, navigate to home
         router.push('/')
 
       } else if (action === 'link') {
-        // Show invite link modal (DON'T redirect yet)
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const inviteUrl = `${origin}/invite/${newLocket.invite_code}`
         setInviteLink(inviteUrl)
         setShowInviteModal(true)
 
       } else {
-        // Skip - just redirect to home
         router.push('/')
       }
 
@@ -153,190 +141,221 @@ export default function LocketCreator() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 min-h-screen">
-      <div className="w-full max-w-[580px] bg-white dark:bg-[#2a1d21] rounded-xl shadow-xl shadow-primary/5 dark:shadow-black/20 overflow-hidden relative border border-white/50 dark:border-white/5">
-        <div className="pt-12"></div>
-        <div className="px-8 sm:px-12 pb-12 flex flex-col items-center">
+    <>
+      {/* Custom styles for glassmorphism */}
+      <style jsx global>{`
+        .glass-card {
+          background: rgba(42, 22, 30, 0.75);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
 
-          {/* Header */}
-          <div className="text-center mt-2 mb-10">
-            <h1 className="text-[#181113] dark:text-white text-4xl sm:text-[42px] font-medium leading-[1.15] mb-3 tracking-tight font-display italic">
-              Every story needs <br /> a beginning
-            </h1>
-            <p className="text-[#875e69] dark:text-[#dcb8c3] text-lg font-normal font-sans">
-              Let's set up your side of the locket.
-            </p>
-          </div>
+        .input-gradient-focus:focus-within {
+          border-color: #C8A659 !important;
+          box-shadow: 0 0 0 1px #C8A659, 0 0 15px rgba(200, 166, 89, 0.1);
+        }
 
-          {/* Error Display */}
-          {error && (
-            <div className="w-full mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3 text-red-700 dark:text-red-300">
-              <AlertCircle className="h-5 w-5 flex-shrink-0" />
-              <p className="text-sm">{error}</p>
+        .bg-romantic-overlay {
+          background: linear-gradient(to bottom, rgba(34, 16, 22, 0.7), rgba(34, 16, 22, 0.9));
+        }
+      `}</style>
+
+      <div className="bg-[#221016] font-display text-white antialiased overflow-hidden h-screen w-full relative">
+        {/* Background Image Layer */}
+        <div
+          className="absolute inset-0 z-0 w-full h-full bg-cover bg-center"
+          style={{
+            backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC9SOxeh7o9RmjZeAAN2jojATEE6Wp_0bKcBrSlpPb0jPzhuWEfzhCv1KZ7PpCTcLv6ebQTDOg-hX2ex6Uq0EAPyN8WNwz-7ZwSF6Hshab2zypHym4HRjmFhpOjb9sPDuly_swIFuTuBFlcHiSqyBNgTpvWMcbWPcgeTaDE89WWJ_mYvkYF8Hg5jsB1hQt_9hwIkPzKxoIpTQTVGqH_OR8-AWAKxpZY99aIg45xbUUGo0QGRXwyld3z9AxZ4TgX8x_mKlf3LHFK3ibl')",
+            filter: 'blur(8px)'
+          }}
+        />
+
+        {/* Dark Overlay */}
+        <div className="absolute inset-0 z-0 bg-romantic-overlay" />
+
+        {/* Main Layout Container */}
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+
+          {/* Glass Card */}
+          <div className="glass-card w-full max-w-[480px] rounded-2xl p-8 md:p-10 flex flex-col items-center">
+
+            {/* Icon Header */}
+            <div className="mb-6 flex items-center justify-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/40">
+                <span className="material-symbols-outlined text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
+              </div>
             </div>
-          )}
 
-          {/* Avatar Upload */}
-          <div className="mb-10 relative group">
-            <label htmlFor="avatar-upload" className="cursor-pointer block relative">
-              <div className="w-36 h-36 rounded-full border-[3px] border-white dark:border-[#3d2b30] shadow-xl shadow-primary/10 flex items-center justify-center transition-all duration-300 relative overflow-hidden ring-4 ring-primary/10 dark:ring-primary/20 bg-background-light dark:bg-white/5">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Profile"
-                    className="w-full h-full object-cover opacity-95 group-hover:scale-105 transition-transform duration-500"
+            {/* Title & Subtitle */}
+            <div className="text-center mb-10">
+              <h1 className="font-serif italic text-3xl md:text-4xl text-white mb-3 tracking-wide leading-tight">
+                Every story needs a beginning
+              </h1>
+              <p className="text-white/60 text-sm font-medium tracking-wide uppercase">
+                Let's set up your side of the locket
+              </p>
+            </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="w-full mb-6 bg-red-900/30 border border-red-500/30 rounded-lg p-4 flex items-center gap-3 text-red-300">
+                <span className="material-symbols-outlined text-xl flex-shrink-0">error</span>
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Avatar Upload */}
+            <div className="mb-10 relative group cursor-pointer">
+              <label htmlFor="avatar-upload" className="cursor-pointer">
+                <div className="relative h-28 w-28 rounded-full border-2 border-dashed border-white/20 hover:border-[#C8A659]/50 transition-colors duration-300 flex items-center justify-center bg-[#331922] overflow-hidden">
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Profile"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-white/20 text-4xl group-hover:text-white/40 transition-colors">add_a_photo</span>
+                  )}
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    ref={fileInputRef}
                   />
-                ) : (
-                  <User className="w-12 h-12 text-primary/40" />
-                )}
-                <input
-                  type="file"
-                  id="avatar-upload"
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
-                  ref={fileInputRef}
-                />
-              </div>
-              <div className="absolute bottom-1 right-1 bg-white dark:bg-[#3d2b30] text-primary p-2 rounded-full shadow-md border border-gray-100 dark:border-gray-700 flex items-center justify-center z-10 transition-transform group-hover:scale-110">
-                <Pencil className="w-[18px] h-[18px]" />
-              </div>
-            </label>
-          </div>
-
-          {/* Form */}
-          <form className="w-full flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
-
-            {/* Nickname Input */}
-            <div className="flex flex-col gap-2">
-              <label htmlFor="nickname" className="text-[#181113] dark:text-gray-200 text-lg font-medium pl-4 font-display">
-                What should we call you?
+                </div>
               </label>
-              <div className="relative">
+
+              {/* Edit Pencil Badge */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Upload photo"
+                className="absolute bottom-0 right-0 translate-x-1 translate-y-1 h-9 w-9 rounded-full bg-[#C8A659] text-[#221016] flex items-center justify-center shadow-lg hover:bg-[#dabb70] transition-colors border-2 border-[#2a161e]"
+              >
+                <span className="material-symbols-outlined text-lg">edit</span>
+              </button>
+            </div>
+
+            {/* Form Fields */}
+            <form className="w-full space-y-5" onSubmit={(e) => e.preventDefault()}>
+
+              {/* Nickname Input */}
+              <div className="group input-gradient-focus relative rounded-lg bg-[#331922] border border-[#673244] transition-all duration-300">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#C8A659] transition-colors">
+                  <span className="material-symbols-outlined">person</span>
+                </div>
                 <input
                   type="text"
-                  id="nickname"
                   placeholder="Your Nickname"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  className="w-full h-16 bg-background-light dark:bg-white/5 border border-transparent dark:border-white/10 rounded-lg px-6 text-lg text-[#181113] dark:text-white placeholder:text-[#875e69]/50 dark:placeholder:text-white/30 focus:border-primary focus:ring-0 focus:bg-white dark:focus:bg-white/10 transition-all font-sans"
+                  className="w-full bg-transparent py-3.5 pl-12 pr-4 text-white placeholder-white/30 focus:outline-none focus:ring-0 border-none font-medium text-[15px]"
                 />
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-primary/40 pointer-events-none">
-                  <User className="w-6 h-6" />
-                </div>
               </div>
-            </div>
 
-            {/* Partner Email Input */}
-            <div className="flex flex-col gap-2">
-              <label htmlFor="partner-email" className="text-[#181113] dark:text-gray-200 text-lg font-medium pl-4 font-display">
-                Who is this locket for?
-              </label>
-              <div className="relative">
+              {/* Partner Email Input */}
+              <div className="group input-gradient-focus relative rounded-lg bg-[#331922] border border-[#673244] transition-all duration-300">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-primary transition-colors">
+                  <span className="material-symbols-outlined">volunteer_activism</span>
+                </div>
                 <input
                   type="email"
-                  id="partner-email"
                   placeholder="Partner's Email"
                   value={partnerEmail}
                   onChange={(e) => setPartnerEmail(e.target.value)}
-                  className="w-full h-16 bg-background-light dark:bg-white/5 border border-transparent dark:border-white/10 rounded-lg px-6 text-lg text-[#181113] dark:text-white placeholder:text-[#875e69]/50 dark:placeholder:text-white/30 focus:border-primary focus:ring-0 focus:bg-white dark:focus:bg-white/10 transition-all font-sans"
+                  className="w-full bg-transparent py-3.5 pl-12 pr-4 text-white placeholder-white/30 focus:outline-none focus:ring-0 border-none font-medium text-[15px]"
                 />
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-primary/40 pointer-events-none">
-                  <Heart className="w-6 h-6" />
-                </div>
               </div>
 
-              {/* Action Links */}
-              <div className="px-4 mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm font-sans">
-                <button
-                  type="button"
-                  onClick={() => handleSetup('link')}
-                  disabled={isLoading}
-                  className="text-primary hover:text-[#a03d58] font-medium flex items-center gap-1.5 transition-colors group/link text-left disabled:opacity-50"
-                >
-                  <Link className="w-[18px] h-[18px]" />
-                  <span className="underline decoration-transparent group-hover/link:decoration-current underline-offset-2 transition-all">
-                    Generate an invite link instead
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetup('skip')}
-                  disabled={isLoading}
-                  className="text-[#875e69] dark:text-[#dcb8c3] hover:text-primary dark:hover:text-white opacity-70 hover:opacity-100 transition-all font-medium text-left disabled:opacity-50"
-                >
-                  Skip for now
-                </button>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="mt-4">
+              {/* Main Button */}
               <button
-                type="submit"
+                type="button"
                 onClick={() => handleSetup('create')}
                 disabled={isLoading}
-                className="w-full bg-primary hover:bg-[#a03d58] text-white h-16 rounded-lg font-medium text-lg shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 group/btn disabled:opacity-70 disabled:cursor-not-allowed"
+                className="group relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary py-3.5 text-white shadow-lg transition-all duration-300 hover:bg-[#a03d58] hover:shadow-primary/25 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    <span>Create Locket</span>
-                    <ArrowRight className="w-5 h-5 transition-transform group-hover/btn:translate-x-1" />
+                    <span className="font-bold tracking-wide text-sm">Create Locket</span>
+                    <span className="material-symbols-outlined text-lg transition-transform group-hover:translate-x-1">arrow_forward</span>
                   </>
                 )}
               </button>
+            </form>
+
+            {/* Secondary Links */}
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleSetup('link')}
+                disabled={isLoading}
+                className="text-sm font-medium text-[#C8A659] hover:text-[#dabb70] hover:underline decoration-[#C8A659]/40 underline-offset-4 transition-colors disabled:opacity-50"
+              >
+                Generate invite link instead
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetup('skip')}
+                disabled={isLoading}
+                className="text-xs text-white/40 hover:text-white/60 transition-colors font-medium disabled:opacity-50"
+              >
+                Skip for now
+              </button>
             </div>
-          </form>
+          </div>
+
+          {/* Footer / Branding */}
+          <div className="absolute bottom-6 text-white/10 text-xs font-medium tracking-widest uppercase pointer-events-none">
+            Twofold © 2024
+          </div>
         </div>
 
-        {/* Decorative Bottom Bar */}
-        <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20"></div>
-      </div>
-
-      {/* Footer Links */}
-      <div className="mt-8 flex gap-6 text-[#875e69] dark:text-[#dcb8c3] text-sm font-sans opacity-60">
-        <a href="#" className="hover:text-primary transition-colors">Help</a>
-        <a href="#" className="hover:text-primary transition-colors">Privacy</a>
-        <a href="#" className="hover:text-primary transition-colors">Terms</a>
-      </div>
-
-      {/* Invite Link Modal */}
-      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display">Share Your Locket</DialogTitle>
-            <DialogDescription>
-              Send this link to your partner so they can join your locket.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center space-x-2 mt-4">
-            <div className="flex-1 bg-background-light dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-3">
-              <p className="text-sm text-[#181113] dark:text-white truncate font-mono">
-                {inviteLink}
-              </p>
+        {/* Invite Link Modal */}
+        <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+          <DialogContent className="sm:max-w-md bg-[#2a161e] border-[#673244]">
+            <DialogHeader>
+              <DialogTitle className="font-display text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#C8A659]">share</span>
+                Share Your Locket
+              </DialogTitle>
+              <DialogDescription className="text-white/60">
+                Send this link to your partner so they can join your locket.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center space-x-2 mt-4">
+              <div className="flex-1 bg-[#331922] border border-[#673244] rounded-lg px-4 py-3">
+                <p className="text-sm text-white truncate font-mono">
+                  {inviteLink}
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={handleCopyLink}
+                className="shrink-0 bg-[#331922] border-[#673244] hover:bg-[#4a2431] text-white"
+                variant="outline"
+              >
+                {copied ? (
+                  <span className="material-symbols-outlined text-green-400">check</span>
+                ) : (
+                  <span className="material-symbols-outlined">content_copy</span>
+                )}
+              </Button>
             </div>
-            <Button
-              type="button"
-              onClick={handleCopyLink}
-              className="shrink-0"
-              variant="outline"
-            >
-              {copied ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          <DialogFooter className="mt-6">
-            <Button onClick={handleCloseModal} className="w-full sm:w-auto">
-              Continue to Locket
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter className="mt-6">
+              <Button onClick={handleCloseModal} className="w-full sm:w-auto bg-primary hover:bg-[#a03d58]">
+                Continue to Locket
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </>
   )
 }

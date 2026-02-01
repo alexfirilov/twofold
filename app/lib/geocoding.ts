@@ -1,8 +1,9 @@
 /**
- * Google Maps Geocoding API utility
+ * Google Maps Geocoding & Places API utility
  *
  * Converts GPS coordinates to human-readable place names.
- * Free tier: $200/month credit = ~40,000 requests/month
+ * Uses Places API (New) for specific venues, falls back to Geocoding API for addresses.
+ * Free tier: $200/month credit
  */
 
 interface GeocodeResult {
@@ -12,7 +13,7 @@ interface GeocodeResult {
   city?: string;
   state?: string;
   country?: string;
-  shortName: string;         // Concise name for display (e.g., "Mandoria, Łódź")
+  shortName: string;         // Concise name for display (e.g., "Mandoria, Rzgów")
 }
 
 interface GoogleGeocodeResponse {
@@ -29,8 +30,165 @@ interface GoogleGeocodeResponse {
   error_message?: string;
 }
 
+interface PlacesNearbyResponse {
+  places?: Array<{
+    displayName?: {
+      text: string;
+      languageCode: string;
+    };
+    primaryType?: string;
+    types?: string[];
+    shortFormattedAddress?: string;
+  }>;
+  error?: {
+    message: string;
+    status: string;
+  };
+}
+
+// Place types supported by Places API (New) - for finding specific venues
+// See: https://developers.google.com/maps/documentation/places/web-service/place-types
+const INTERESTING_PLACE_TYPES = [
+  'amusement_park',
+  'aquarium',
+  'art_gallery',
+  'campground',
+  'casino',
+  'church',
+  'city_hall',
+  'convention_center',
+  'marina',
+  'mosque',
+  'museum',
+  'national_park',
+  'park',
+  'stadium',
+  'synagogue',
+  'tourist_attraction',
+  'visitor_center',
+  'zoo',
+  // Restaurants and cafes for memorable meals
+  'restaurant',
+  'cafe',
+  'bar',
+];
+
+/**
+ * Search for nearby places using Places API (New)
+ */
+async function searchNearbyPlaces(
+  latitude: number,
+  longitude: number,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    console.log('[Places] Searching for nearby places at:', latitude, longitude);
+
+    const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.displayName,places.primaryType,places.types,places.shortFormattedAddress',
+      },
+      body: JSON.stringify({
+        includedTypes: INTERESTING_PLACE_TYPES,
+        maxResultCount: 5,
+        locationRestriction: {
+          circle: {
+            center: {
+              latitude,
+              longitude,
+            },
+            radius: 100.0, // 100 meters - very close proximity
+          },
+        },
+      }),
+    });
+
+    const data: PlacesNearbyResponse = await response.json();
+
+    if (data.error) {
+      console.log('[Places] API error:', data.error.status, data.error.message);
+      return null;
+    }
+
+    if (!data.places || data.places.length === 0) {
+      console.log('[Places] No nearby places found within 100m');
+      return null;
+    }
+
+    // Find the most relevant place (prefer tourist attractions, parks, landmarks)
+    const priorityTypes = ['tourist_attraction', 'park', 'national_park', 'museum', 'historical_landmark', 'cultural_landmark'];
+
+    let bestPlace = data.places[0];
+    for (const place of data.places) {
+      if (place.types?.some(t => priorityTypes.includes(t))) {
+        bestPlace = place;
+        break;
+      }
+    }
+
+    const placeName = bestPlace.displayName?.text;
+    console.log('[Places] Found place:', placeName, '| Type:', bestPlace.primaryType);
+
+    return placeName || null;
+  } catch (error) {
+    console.error('[Places] Exception:', error);
+    return null;
+  }
+}
+
+/**
+ * Get address info using Geocoding API
+ */
+async function getAddressInfo(
+  latitude: number,
+  longitude: number,
+  apiKey: string
+): Promise<{ city?: string; country?: string; formattedAddress: string } | null> {
+  try {
+    const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+    url.searchParams.set('latlng', `${latitude},${longitude}`);
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('language', 'en');
+
+    console.log('[Geocoding] Getting address info for:', latitude, longitude);
+    const response = await fetch(url.toString());
+    const data: GoogleGeocodeResponse = await response.json();
+
+    if (data.status !== 'OK') {
+      console.log('[Geocoding] Failed:', data.status, data.error_message);
+      return null;
+    }
+
+    const result = data.results[0];
+    const components: Record<string, string> = {};
+
+    for (const component of result.address_components) {
+      for (const type of component.types) {
+        components[type] = component.long_name;
+      }
+    }
+
+    return {
+      city: components['locality'] || components['sublocality'] || components['administrative_area_level_2'],
+      country: components['country'],
+      formattedAddress: result.formatted_address,
+    };
+  } catch (error) {
+    console.error('[Geocoding] Exception:', error);
+    return null;
+  }
+}
+
 /**
  * Reverse geocode coordinates to a human-readable location
+ *
+ * Strategy:
+ * 1. Try Places API to find specific venue (park, restaurant, landmark)
+ * 2. Use Geocoding API to get city/country info
+ * 3. Combine them: "Mandoria, Rzgów" or just "Rzgów, Poland" if no venue found
  */
 export async function reverseGeocode(
   latitude: number,
@@ -44,105 +202,48 @@ export async function reverseGeocode(
   }
 
   try {
-    const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
-    url.searchParams.set('latlng', `${latitude},${longitude}`);
-    url.searchParams.set('key', apiKey);
-    url.searchParams.set('result_type', 'point_of_interest|establishment|neighborhood|locality|sublocality');
-    url.searchParams.set('language', 'en');
+    // Run both API calls in parallel for speed
+    const [placeName, addressInfo] = await Promise.all([
+      searchNearbyPlaces(latitude, longitude, apiKey),
+      getAddressInfo(latitude, longitude, apiKey),
+    ]);
 
-    const response = await fetch(url.toString());
-    const data: GoogleGeocodeResponse = await response.json();
-
-    if (data.status !== 'OK') {
-      // Try again without result_type filter for more results
-      url.searchParams.delete('result_type');
-      const fallbackResponse = await fetch(url.toString());
-      const fallbackData: GoogleGeocodeResponse = await fallbackResponse.json();
-
-      if (fallbackData.status !== 'OK') {
-        console.error('Geocoding failed:', fallbackData.status, fallbackData.error_message);
-        return null;
-      }
-
-      return parseGeocodeResponse(fallbackData);
+    if (!addressInfo) {
+      console.log('[Geocoding] Could not get address info');
+      return null;
     }
 
-    return parseGeocodeResponse(data);
+    // Build the short name
+    let shortName: string;
+
+    if (placeName) {
+      // We found a specific place - combine with city
+      if (addressInfo.city) {
+        shortName = `${placeName}, ${addressInfo.city}`;
+      } else {
+        shortName = placeName;
+      }
+      console.log('[Geocoding] Final result (with place):', shortName);
+    } else {
+      // No specific place found - use city, country
+      const parts: string[] = [];
+      if (addressInfo.city) parts.push(addressInfo.city);
+      if (addressInfo.country && parts.length < 2) parts.push(addressInfo.country);
+      shortName = parts.length > 0 ? parts.join(', ') : addressInfo.formattedAddress;
+      console.log('[Geocoding] Final result (address only):', shortName);
+    }
+
+    return {
+      formattedAddress: addressInfo.formattedAddress,
+      placeName: placeName || undefined,
+      city: addressInfo.city,
+      country: addressInfo.country,
+      shortName,
+    };
   } catch (error) {
-    console.error('Geocoding error:', error);
+    console.error('[Geocoding] Exception:', error);
     return null;
   }
-}
-
-/**
- * Parse Google's geocode response into a clean result
- */
-function parseGeocodeResponse(data: GoogleGeocodeResponse): GeocodeResult {
-  const result = data.results[0];
-
-  // Extract address components
-  const components: Record<string, string> = {};
-  for (const component of result.address_components) {
-    for (const type of component.types) {
-      components[type] = component.long_name;
-    }
-  }
-
-  // Try to find a point of interest or establishment name
-  let placeName: string | undefined;
-  for (const res of data.results) {
-    if (res.types.includes('point_of_interest') ||
-        res.types.includes('establishment') ||
-        res.types.includes('tourist_attraction')) {
-      // The first component is usually the place name
-      const firstComponent = res.address_components[0];
-      if (firstComponent && !firstComponent.types.includes('street_number')) {
-        placeName = firstComponent.long_name;
-        break;
-      }
-    }
-  }
-
-  // Build a concise short name for display
-  let shortName: string;
-
-  if (placeName) {
-    // If we have a place name, use it with city
-    const city = components['locality'] || components['sublocality'] || components['administrative_area_level_2'];
-    shortName = city ? `${placeName}, ${city}` : placeName;
-  } else {
-    // Otherwise, use neighborhood/city/country format
-    const parts: string[] = [];
-
-    if (components['neighborhood']) {
-      parts.push(components['neighborhood']);
-    } else if (components['sublocality']) {
-      parts.push(components['sublocality']);
-    }
-
-    if (components['locality']) {
-      parts.push(components['locality']);
-    } else if (components['administrative_area_level_2']) {
-      parts.push(components['administrative_area_level_2']);
-    }
-
-    // Add country for international context if not too long
-    if (parts.length < 2 && components['country']) {
-      parts.push(components['country']);
-    }
-
-    shortName = parts.length > 0 ? parts.join(', ') : result.formatted_address;
-  }
-
-  return {
-    formattedAddress: result.formatted_address,
-    placeName,
-    neighborhood: components['neighborhood'] || components['sublocality'],
-    city: components['locality'] || components['administrative_area_level_2'],
-    state: components['administrative_area_level_1'],
-    country: components['country'],
-    shortName,
-  };
 }
 
 /**

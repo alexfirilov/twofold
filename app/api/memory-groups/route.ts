@@ -5,7 +5,8 @@ import {
   updateMemoryGroup,
   deleteMemoryGroup,
   getMemoryGroupById,
-  logMemoryActivity
+  logMemoryActivity,
+  updateMediaItem
 } from '@/lib/db'
 import type { CreateMemoryGroup, UpdateMemoryGroup } from '@/lib/types'
 import { requireAuth, requireLocketAccess, getUserFromAuthHeader } from '@/lib/firebase/serverAuth'
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const { id, locket_id, ...updates }: { id: string; locket_id: string } & UpdateMemoryGroup = await request.json()
+    const { id, locket_id, place_name, ...updates }: { id: string; locket_id: string; place_name?: string } & UpdateMemoryGroup = await request.json()
 
     if (!id) {
       return NextResponse.json(
@@ -167,8 +168,8 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verify the memory group belongs to the locket
-    const existingGroup = await getMemoryGroupById(id, false)
+    // Verify the memory group belongs to the locket and get media items
+    const existingGroup = await getMemoryGroupById(id, true) // Include media items
 
     if (!existingGroup || existingGroup.locket_id !== locket_id) {
       return NextResponse.json(
@@ -186,31 +187,59 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Log activity for changes (non-blocking)
-    try {
-      const changes: string[] = []
-      if (updates.title !== undefined && updates.title !== existingGroup.title) {
-        changes.push('title')
-      }
-      if (updates.description !== undefined && updates.description !== existingGroup.description) {
-        changes.push('description')
-      }
-      if (updates.date_taken !== undefined) {
+    // Track changes for activity log
+    const changes: string[] = []
+
+    // Check title change
+    if (updates.title !== undefined && updates.title !== existingGroup.title) {
+      changes.push('title')
+    }
+
+    // Check description change
+    if (updates.description !== undefined && updates.description !== existingGroup.description) {
+      changes.push('caption')
+    }
+
+    // Check date change (compare actual values)
+    if (updates.date_taken !== undefined) {
+      const existingDate = existingGroup.date_taken ? new Date(existingGroup.date_taken).toISOString().split('T')[0] : null
+      const newDate = updates.date_taken ? new Date(updates.date_taken).toISOString().split('T')[0] : null
+      if (existingDate !== newDate) {
         changes.push('date')
       }
+    }
 
-      if (changes.length > 0) {
+    // Handle location update on all media items
+    if (place_name !== undefined) {
+      const existingLocation = existingGroup.media_items?.[0]?.place_name || null
+      const newLocation = place_name || null
+
+      if (existingLocation !== newLocation) {
+        changes.push('location')
+
+        // Update all media items with new location
+        if (existingGroup.media_items) {
+          for (const media of existingGroup.media_items) {
+            await updateMediaItem(media.id, { place_name: place_name || undefined })
+          }
+        }
+      }
+    }
+
+    // Log activity for changes (non-blocking)
+    if (changes.length > 0) {
+      try {
         await logMemoryActivity(
           id,
           locket_id,
           'memory_updated',
-          `Updated ${changes.join(', ')}`,
+          `edited ${changes.join(', ')}`,
           user.uid
         )
+      } catch (activityError) {
+        console.error('Failed to log activity:', activityError)
+        // Don't fail the request if activity logging fails
       }
-    } catch (activityError) {
-      console.error('Failed to log activity:', activityError)
-      // Don't fail the request if activity logging fails
     }
 
     return NextResponse.json(updatedGroup, { status: 200 })

@@ -522,6 +522,23 @@ export async function updateMediaItem(id: string, updates: UpdateMediaItem): Pro
       paramCount++
     }
 
+    // Location fields
+    if (updates.latitude !== undefined) {
+      setParts.push(`latitude = $${paramCount}`)
+      values.push(updates.latitude)
+      paramCount++
+    }
+    if (updates.longitude !== undefined) {
+      setParts.push(`longitude = $${paramCount}`)
+      values.push(updates.longitude)
+      paramCount++
+    }
+    if (updates.place_name !== undefined) {
+      setParts.push(`place_name = $${paramCount}`)
+      values.push(updates.place_name)
+      paramCount++
+    }
+
     if (setParts.length === 0) {
       throw new Error('No valid fields to update')
     }
