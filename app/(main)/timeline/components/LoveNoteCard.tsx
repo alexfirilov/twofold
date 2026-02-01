@@ -1,6 +1,5 @@
 'use client';
 
-import { Heart, Quote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Newsreader } from 'next/font/google';
 
@@ -14,7 +13,7 @@ interface LoveNoteCardProps {
     date: string;
     note: string;
     authorInitial?: string;
-    authorAvatarUrl?: string; // New prop
+    authorAvatarUrl?: string;
     className?: string;
     align?: 'left' | 'right';
 }
@@ -31,26 +30,29 @@ export function LoveNoteCard({
         <div className={cn("group w-full max-w-md", className)}>
             <div
                 className={cn(
-                    "relative bg-[#FDF6F7] p-6 rounded-sm shadow-sm border border-rose-100/50 transition-all duration-300 hover:shadow-md hover:-translate-y-1",
-                    align === 'left' ? "rotate-1" : "-rotate-1",
+                    "relative p-6 rounded-2xl transition-all duration-500",
+                    "glass-card-note",
+                    "hover:border-[#C8A659] hover:shadow-[0_0_30px_-5px_rgba(200,166,89,0.3)]",
+                    "hover:-translate-y-1",
+                    align === 'left' ? "rotate-1 hover:rotate-0" : "-rotate-1 hover:rotate-0",
                 )}
-                style={{
-                    boxShadow: "2px 2px 10px rgba(74, 44, 53, 0.05)"
-                }}
             >
-                {/* Decorative Tape element - simulated with CSS */}
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-24 h-6 bg-rose-200/40 rotate-[2deg] backdrop-blur-[1px]" />
+                {/* Decorative gold accent at top */}
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-16 h-1 bg-gradient-to-r from-transparent via-[#C8A659]/60 to-transparent rounded-full" />
 
                 <div className="mb-4 text-center">
-                    <span className="text-[10px] tracking-widest uppercase text-muted-foreground font-medium">{date}</span>
+                    <span className="text-[10px] tracking-widest uppercase text-white/40 font-medium flex items-center justify-center gap-1">
+                        <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>edit_note</span>
+                        {date}
+                    </span>
                 </div>
 
                 <div className="relative">
-                    <Quote className="absolute -top-2 -left-2 w-6 h-6 text-accent/20 fill-accent/20" />
-                    <p className={`${newsreader.className} text-xl md:text-2xl text-truffle leading-relaxed text-center px-4 py-2`}>
+                    <span className="material-symbols-outlined absolute -top-1 -left-1 text-[#C8A659]/30" style={{ fontSize: '24px' }}>format_quote</span>
+                    <p className={`${newsreader.className} text-xl md:text-2xl text-white/90 leading-relaxed text-center px-6 py-2`}>
                         {note}
                     </p>
-                    <Quote className="absolute -bottom-2 -right-2 w-6 h-6 text-accent/20 fill-accent/20 rotate-180" />
+                    <span className="material-symbols-outlined absolute -bottom-1 -right-1 text-[#C8A659]/30 rotate-180" style={{ fontSize: '24px' }}>format_quote</span>
                 </div>
 
                 <div className="mt-6 flex justify-center items-center">
@@ -58,19 +60,31 @@ export function LoveNoteCard({
                         <img
                             src={authorAvatarUrl}
                             alt={authorInitial || "User"}
-                            className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm"
+                            className="w-10 h-10 rounded-full object-cover border-2 border-[#673244] shadow-lg"
                         />
                     ) : (
-                        <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-primary font-heading font-bold text-sm shadow-inner">
-                            {authorInitial || '❤️'}
+                        <div className="w-8 h-8 rounded-full bg-[#331922] flex items-center justify-center text-[#C8A659] font-heading font-bold text-sm border border-[#673244]">
+                            {authorInitial || (
+                                <span className="material-symbols-outlined text-primary" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>favorite</span>
+                            )}
                         </div>
                     )}
                 </div>
 
                 <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Heart size={16} className="text-rose-300 fill-rose-300" />
+                    <span className="material-symbols-outlined text-primary" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>favorite</span>
                 </div>
             </div>
+
+            <style jsx>{`
+                .glass-card-note {
+                    background: rgba(42, 22, 30, 0.85);
+                    backdrop-filter: blur(16px);
+                    -webkit-backdrop-filter: blur(16px);
+                    border: 1px solid rgba(200, 166, 89, 0.2);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                }
+            `}</style>
         </div>
     );
 }

@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, is_public, share_password } = body
+    const { name, description, is_public, share_password, anniversary_date, cover_photo_url, location_origin } = body
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -76,6 +76,9 @@ export async function POST(request: NextRequest) {
       is_public: is_public || false,
       share_password: share_password?.trim() || undefined,
       admin_firebase_uid: user.uid,
+      anniversary_date: anniversary_date || undefined,
+      cover_photo_url: cover_photo_url?.trim() || undefined,
+      location_origin: location_origin?.trim() || undefined,
     }
 
     const locket = await createLocket(locketData)

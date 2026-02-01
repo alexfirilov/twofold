@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json()
-    const { name, description, is_public, share_password } = body
+    const { name, description, is_public, share_password, anniversary_date, cover_photo_url, location_origin } = body
 
     const updates: UpdateLocket = {}
 
@@ -114,6 +114,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     if (share_password !== undefined) {
       updates.share_password = share_password?.trim() || null
+    }
+
+    if (anniversary_date !== undefined) {
+      updates.anniversary_date = anniversary_date || null
+    }
+
+    if (cover_photo_url !== undefined) {
+      updates.cover_photo_url = cover_photo_url?.trim() || null
+    }
+
+    if (location_origin !== undefined) {
+      updates.location_origin = location_origin?.trim() || null
     }
 
     if (Object.keys(updates).length === 0) {

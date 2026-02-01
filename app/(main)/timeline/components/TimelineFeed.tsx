@@ -10,6 +10,7 @@ import { MemoryDetailModal } from './MemoryDetailModal';
 import { Loader2 } from 'lucide-react';
 import { useLocket } from '@/contexts/LocketContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { getProxiedImageUrl } from '@/lib/imageProxy';
 
 interface MediaItem {
     id: string;
@@ -78,12 +79,18 @@ export function TimelineFeed() {
     const [items, setItems] = React.useState<TimelineItem[]>([]);
     const [members, setMembers] = React.useState<LocketMember[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [coverPhotoError, setCoverPhotoError] = React.useState(false);
 
     // Modal state
     const [editingMemory, setEditingMemory] = useState<MemoryGroup | null>(null);
     const [commentingMemory, setCommentingMemory] = useState<{ id: string; title: string } | null>(null);
     const [viewingMemory, setViewingMemory] = useState<MemoryGroup | null>(null);
     const [viewingMemoryLike, setViewingMemoryLike] = useState({ isLiked: false, likeCount: 0 });
+
+    // Reset cover photo error when locket changes
+    React.useEffect(() => {
+        setCoverPhotoError(false);
+    }, [currentLocket?.id]);
 
     const fetchData = React.useCallback(async () => {
         if (!currentLocket || !user) return;
@@ -236,43 +243,60 @@ export function TimelineFeed() {
                 <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
 
                 <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 text-center">
-                    {/* Header avatars */}
+                    {/* Header - Cover Photo or Avatars */}
                     <div className="relative mb-6">
-                        <div className="flex -space-x-4">
-                            {members.length > 0 ? (
-                                members.slice(0, 2).map((member, index) => (
-                                    member.avatar_url ? (
-                                        <div key={member.id} className="w-16 h-16 rounded-full border-4 border-[#221016] overflow-hidden relative ring-2 ring-primary/30">
-                                            <Image
-                                                src={member.avatar_url}
-                                                alt={member.display_name || 'Partner'}
-                                                fill
-                                                className="object-cover"
-                                            />
+                        {currentLocket?.cover_photo_url && !coverPhotoError ? (
+                            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-[#221016] overflow-hidden ring-2 ring-primary/30 shadow-lg shadow-primary/20">
+                                <img
+                                    src={getProxiedImageUrl(currentLocket.cover_photo_url)}
+                                    alt="Locket cover"
+                                    className="w-full h-full object-cover"
+                                    onError={() => setCoverPhotoError(true)}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex -space-x-4">
+                                {members.length > 0 ? (
+                                    members.slice(0, 2).map((member) => (
+                                        member.avatar_url ? (
+                                            <div key={member.id} className="w-16 h-16 rounded-full border-4 border-[#221016] overflow-hidden relative ring-2 ring-primary/30">
+                                                <Image
+                                                    src={member.avatar_url}
+                                                    alt={member.display_name || 'Partner'}
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={member.id}
+                                                className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary font-serif text-xl ring-2 ring-primary/30"
+                                            >
+                                                {member.display_name?.charAt(0).toUpperCase() || '?'}
+                                            </div>
+                                        )
+                                    ))
+                                ) : (
+                                    <>
+                                        <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
+                                            <span className="material-symbols-outlined">person</span>
                                         </div>
-                                    ) : (
-                                        <div
-                                            key={member.id}
-                                            className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary font-serif text-xl ring-2 ring-primary/30"
-                                        >
-                                            {member.display_name?.charAt(0).toUpperCase() || '?'}
+                                        <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
+                                            <span className="material-symbols-outlined">person</span>
                                         </div>
-                                    )
-                                ))
-                            ) : (
-                                <>
-                                    <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
-                                        <span className="material-symbols-outlined">person</span>
-                                    </div>
-                                    <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
-                                        <span className="material-symbols-outlined">person</span>
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#331922] px-3 py-1 rounded-full border border-[#673244] flex items-center gap-1.5 whitespace-nowrap">
                             <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
-                            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">Together Forever</span>
+                            {currentLocket?.anniversary_date ? (
+                                <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">
+                                    {Math.max(0, Math.floor((Date.now() - new Date(currentLocket.anniversary_date).getTime()) / (1000 * 60 * 60 * 24))).toLocaleString()} days together
+                                </span>
+                            ) : (
+                                <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">Together Forever</span>
+                            )}
                         </div>
                     </div>
 
@@ -314,41 +338,60 @@ export function TimelineFeed() {
                 {/* Header Section */}
                 <div className="flex flex-col items-center justify-center mb-16 pt-8">
                     <div className="relative mb-6">
-                        <div className="flex -space-x-4">
-                            {members.length > 0 ? (
-                                members.slice(0, 2).map((member, index) => (
-                                    member.avatar_url ? (
-                                        <div key={member.id} className="w-16 h-16 rounded-full border-4 border-[#221016] overflow-hidden relative ring-2 ring-primary/30 shadow-lg shadow-primary/20">
-                                            <Image
-                                                src={member.avatar_url}
-                                                alt={member.display_name || 'Partner'}
-                                                fill
-                                                className="object-cover"
-                                            />
+                        {/* Cover Photo or Partner Avatars */}
+                        {currentLocket?.cover_photo_url && !coverPhotoError ? (
+                            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-[#221016] overflow-hidden ring-2 ring-primary/30 shadow-lg shadow-primary/20">
+                                <img
+                                    src={getProxiedImageUrl(currentLocket.cover_photo_url)}
+                                    alt="Locket cover"
+                                    className="w-full h-full object-cover"
+                                    onError={() => setCoverPhotoError(true)}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex -space-x-4">
+                                {members.length > 0 ? (
+                                    members.slice(0, 2).map((member) => (
+                                        member.avatar_url ? (
+                                            <div key={member.id} className="w-16 h-16 rounded-full border-4 border-[#221016] overflow-hidden relative ring-2 ring-primary/30 shadow-lg shadow-primary/20">
+                                                <Image
+                                                    src={member.avatar_url}
+                                                    alt={member.display_name || 'Partner'}
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={member.id}
+                                                className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary font-serif text-xl ring-2 ring-primary/30 shadow-lg shadow-primary/20"
+                                            >
+                                                {member.display_name?.charAt(0).toUpperCase() || '?'}
+                                            </div>
+                                        )
+                                    ))
+                                ) : (
+                                    <>
+                                        <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
+                                            <span className="material-symbols-outlined">person</span>
                                         </div>
-                                    ) : (
-                                        <div
-                                            key={member.id}
-                                            className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary font-serif text-xl ring-2 ring-primary/30 shadow-lg shadow-primary/20"
-                                        >
-                                            {member.display_name?.charAt(0).toUpperCase() || '?'}
+                                        <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
+                                            <span className="material-symbols-outlined">person</span>
                                         </div>
-                                    )
-                                ))
-                            ) : (
-                                <>
-                                    <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
-                                        <span className="material-symbols-outlined">person</span>
-                                    </div>
-                                    <div className="w-16 h-16 rounded-full border-4 border-[#221016] bg-[#331922] flex items-center justify-center text-primary/50 ring-2 ring-primary/30">
-                                        <span className="material-symbols-outlined">person</span>
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        {/* Days Together Badge */}
                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#331922] px-3 py-1 rounded-full border border-[#673244] flex items-center gap-1.5 whitespace-nowrap shadow-lg">
                             <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
-                            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">Together Forever</span>
+                            {currentLocket?.anniversary_date ? (
+                                <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">
+                                    {Math.max(0, Math.floor((Date.now() - new Date(currentLocket.anniversary_date).getTime()) / (1000 * 60 * 60 * 24))).toLocaleString()} days together
+                                </span>
+                            ) : (
+                                <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">Together Forever</span>
+                            )}
                         </div>
                     </div>
                     <h1 className="font-serif italic text-4xl md:text-5xl text-white mb-3 text-center">Our Timeline</h1>

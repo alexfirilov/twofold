@@ -822,8 +822,8 @@ export async function createLocket(data: CreateCorner): Promise<Corner> {
 
     // Create the locket
     const locketResult = await client.query(`
-      INSERT INTO lockets (name, description, slug, invite_code, is_public, share_password, admin_firebase_uid)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO lockets (name, description, slug, invite_code, is_public, share_password, admin_firebase_uid, anniversary_date, cover_photo_url, location_origin)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       data.name,
@@ -832,7 +832,10 @@ export async function createLocket(data: CreateCorner): Promise<Corner> {
       inviteCode,
       data.is_public || false,
       data.share_password || null,
-      data.admin_firebase_uid
+      data.admin_firebase_uid,
+      data.anniversary_date || null,
+      data.cover_photo_url || null,
+      data.location_origin || null
     ])
 
     const locket = locketResult.rows[0]
@@ -902,6 +905,24 @@ export async function updateLocket(id: string, updates: UpdateCorner, firebaseUi
     if (updates.share_password !== undefined) {
       setParts.push(`share_password = $${paramCount}`)
       values.push(updates.share_password)
+      paramCount++
+    }
+
+    if (updates.anniversary_date !== undefined) {
+      setParts.push(`anniversary_date = $${paramCount}`)
+      values.push(updates.anniversary_date)
+      paramCount++
+    }
+
+    if (updates.cover_photo_url !== undefined) {
+      setParts.push(`cover_photo_url = $${paramCount}`)
+      values.push(updates.cover_photo_url)
+      paramCount++
+    }
+
+    if (updates.location_origin !== undefined) {
+      setParts.push(`location_origin = $${paramCount}`)
+      values.push(updates.location_origin)
       paramCount++
     }
 

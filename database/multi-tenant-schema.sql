@@ -26,6 +26,13 @@ CREATE TABLE lockets (
     -- Firebase Auth admin user
     admin_firebase_uid VARCHAR(255) NOT NULL, -- Firebase UID of the locket creator
 
+    -- Relationship metadata (Twofold features)
+    anniversary_date DATE, -- When the relationship started
+    cover_photo_url TEXT, -- URL to cover photo displayed on dashboard
+    location_origin TEXT, -- Where the couple met
+    next_countdown_event_name VARCHAR(255), -- Custom countdown event name
+    next_countdown_date DATE, -- Custom countdown target date
+
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

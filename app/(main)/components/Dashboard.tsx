@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Plus, ArrowRight, Calendar, Loader2 } from 'lucide-react';
+import { Plus, ArrowRight, Calendar, Loader2, Heart, MapPin } from 'lucide-react';
 import { CountdownWidget } from '@/(main)/profile/components/CountdownWidget';
 import { JournalCard } from '@/(main)/timeline/components/JournalCard';
 import { LoveNoteCard } from '@/(main)/timeline/components/LoveNoteCard';
@@ -150,6 +150,11 @@ export default function Dashboard() {
         )
     }
 
+    // Calculate days together from anniversary date
+    const daysTogether = currentLocket.anniversary_date
+        ? Math.floor((Date.now() - new Date(currentLocket.anniversary_date).getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+
     // Determine target date (Anniversary or next countdown or default)
     // Default to New Year if nothing set
     const targetDate = currentLocket.next_countdown_date
@@ -163,6 +168,23 @@ export default function Dashboard() {
     return (
         <div className="min-h-screen pb-20 md:pb-8 bg-background-light">
             <div className="container mx-auto px-4 py-6 md:py-8 max-w-5xl">
+
+                {/* Days Together Badge */}
+                {daysTogether !== null && daysTogether > 0 && (
+                    <div className="mb-4 flex flex-wrap items-center gap-3">
+                        <div className="bg-primary/10 rounded-full px-4 py-2 flex items-center gap-2">
+                            <Heart className="w-4 h-4 text-primary fill-primary" />
+                            <span className="font-heading text-lg font-bold text-primary">{daysTogether.toLocaleString()}</span>
+                            <span className="text-sm text-muted-foreground">days together</span>
+                        </div>
+                        {currentLocket.location_origin && (
+                            <div className="bg-truffle/5 rounded-full px-4 py-2 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-truffle" />
+                                <span className="text-sm text-truffle">{currentLocket.location_origin}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Welcome Header */}
                 <header className="mb-6 md:mb-8 flex justify-between items-end">

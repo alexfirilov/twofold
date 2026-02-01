@@ -2,58 +2,68 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Map as MapIcon, PlusCircle, User, Heart } from 'lucide-react';
-import { cn } from '@/lib/utils'; // Assuming Shadcn utility exists, if not we might need to adjust imports
+import { cn } from '@/lib/utils';
+
+interface NavItem {
+    label: string;
+    href: string;
+    icon: string;
+    primary?: boolean;
+}
 
 export function Navigation() {
     const pathname = usePathname();
 
-    const navItems = [
+    const navItems: NavItem[] = [
         {
             label: 'Home',
             href: '/',
-            icon: Home,
+            icon: 'home',
         },
         {
             label: 'Timeline',
             href: '/timeline',
-            icon: Heart,
+            icon: 'favorite',
         },
         {
             label: 'Upload',
             href: '/upload',
-            icon: PlusCircle,
+            icon: 'add_circle',
             primary: true,
         },
         {
             label: 'Journey',
             href: '/journey',
-            icon: MapIcon,
+            icon: 'map',
         },
         {
             label: 'Profile',
             href: '/profile',
-            icon: User,
+            icon: 'person',
         },
     ];
 
     return (
         <>
             {/* Mobile Bottom Navigation */}
-            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-rose-100 pb-safe md:hidden shadow-[0_-4px_20px_rgba(186,74,104,0.05)]">
+            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#1a0d12]/95 backdrop-blur-xl border-t border-[#673244]/50 pb-safe md:hidden">
                 <div className="flex justify-between items-end h-16 px-4 pb-2 relative">
-                    {navItems.map((item, index) => {
+                    {navItems.map((item) => {
                         const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
-                        const Icon = item.icon;
 
                         if (item.primary) {
                             return (
                                 <div key={item.href} className="relative -top-5 mx-auto">
                                     <Link
                                         href={item.href}
-                                        className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 border-4 border-background transition-transform active:scale-95"
+                                        className="flex items-center justify-center w-14 h-14 rounded-full bg-primary text-white shadow-lg shadow-primary/40 border-4 border-[#221016] transition-transform active:scale-95"
                                     >
-                                        <Icon size={28} strokeWidth={2.5} />
+                                        <span
+                                            className="material-symbols-outlined"
+                                            style={{ fontSize: '28px', fontVariationSettings: "'FILL' 1" }}
+                                        >
+                                            {item.icon}
+                                        </span>
                                     </Link>
                                 </div>
                             );
@@ -67,15 +77,18 @@ export function Navigation() {
                                     "flex flex-col items-center justify-center w-14 space-y-1 transition-colors duration-200 py-1",
                                     isActive
                                         ? "text-primary font-medium"
-                                        : "text-muted-foreground/60 hover:text-primary/70"
+                                        : "text-white/40 hover:text-primary/70"
                                 )}
                             >
-                                <Icon
-                                    size={24}
-                                    strokeWidth={isActive ? 2.5 : 2}
-                                    fill={isActive ? "currentColor" : "none"}
-                                    className={cn("transition-transform duration-300", isActive && "scale-110")}
-                                />
+                                <span
+                                    className={cn("material-symbols-outlined transition-transform duration-300", isActive && "scale-110")}
+                                    style={{
+                                        fontSize: '24px',
+                                        fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0"
+                                    }}
+                                >
+                                    {item.icon}
+                                </span>
                                 <span className={cn("text-[10px] tracking-wide transition-opacity", isActive ? "opacity-100" : "opacity-80")}>
                                     {item.label}
                                 </span>
@@ -86,15 +99,20 @@ export function Navigation() {
             </nav>
 
             {/* Desktop Sidebar Navigation */}
-            <nav className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 flex-col bg-white border-r border-rose-100 p-6 z-50">
-                <div className="mb-10 pl-2">
-                    <h1 className="font-heading text-3xl text-primary font-bold">Twofold</h1>
+            <nav className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 flex-col bg-[#1a0d12] border-r border-[#673244]/50 p-6 z-50">
+                <div className="mb-10 pl-2 flex items-center gap-2">
+                    <span
+                        className="material-symbols-outlined text-primary"
+                        style={{ fontSize: '28px', fontVariationSettings: "'FILL' 1" }}
+                    >
+                        favorite
+                    </span>
+                    <h1 className="font-heading text-3xl text-white font-bold">Twofold</h1>
                 </div>
 
                 <div className="space-y-2 flex-1">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
-                        const Icon = item.icon;
 
                         return (
                             <Link
@@ -103,22 +121,24 @@ export function Navigation() {
                                 className={cn(
                                     "flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group",
                                     isActive
-                                        ? "bg-rose-50 text-primary font-medium shadow-sm"
-                                        : "text-muted-foreground hover:bg-rose-50/50 hover:text-primary"
+                                        ? "bg-primary/20 text-primary font-medium"
+                                        : "text-white/50 hover:bg-white/5 hover:text-white"
                                 )}
                             >
-                                <Icon
-                                    size={22}
-                                    strokeWidth={isActive ? 2.5 : 2}
-                                    fill={isActive && !item.primary ? "currentColor" : "none"}
-                                    className={cn("transition-transform group-hover:scale-110", isActive && "text-primary")}
-                                />
+                                <span
+                                    className={cn("material-symbols-outlined transition-transform group-hover:scale-110", isActive && "text-primary")}
+                                    style={{
+                                        fontSize: '22px',
+                                        fontVariationSettings: isActive && !item.primary ? "'FILL' 1" : "'FILL' 0"
+                                    }}
+                                >
+                                    {item.icon}
+                                </span>
                                 <span className="text-base">{item.label}</span>
                             </Link>
                         );
                     })}
                 </div>
-
             </nav>
         </>
     );

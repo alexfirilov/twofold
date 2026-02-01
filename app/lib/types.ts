@@ -33,6 +33,8 @@ export interface Locket {
   anniversary_date?: Date;
   next_countdown_event_name?: string;
   next_countdown_date?: Date;
+  cover_photo_url?: string;
+  location_origin?: string;
 
   // Calculated fields (not in DB)
   member_count?: number;
@@ -50,6 +52,9 @@ export interface CreateLocket {
   is_public?: boolean;
   share_password?: string;
   admin_firebase_uid: string;
+  anniversary_date?: Date | string;
+  cover_photo_url?: string;
+  location_origin?: string;
 }
 
 // Backwards compatibility alias
@@ -60,6 +65,9 @@ export interface UpdateLocket {
   description?: string;
   is_public?: boolean;
   share_password?: string;
+  anniversary_date?: Date | string | null;
+  cover_photo_url?: string | null;
+  location_origin?: string | null;
 }
 
 // Backwards compatibility alias
