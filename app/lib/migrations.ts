@@ -361,6 +361,79 @@ const migrations = [
       ALTER TABLE memory_likes ENABLE ROW LEVEL SECURITY;
     `,
   },
+  {
+    name: '108_add_locket_details',
+    sql: `
+      -- Add cover photo and location origin fields to lockets table
+      ALTER TABLE lockets
+      ADD COLUMN IF NOT EXISTS cover_photo_url TEXT;
+
+      ALTER TABLE lockets
+      ADD COLUMN IF NOT EXISTS location_origin TEXT;
+
+      COMMENT ON COLUMN lockets.cover_photo_url IS 'URL to the cover photo for this locket, displayed as hero on Dashboard';
+      COMMENT ON COLUMN lockets.location_origin IS 'Where the couple met or where their relationship began';
+    `,
+  },
+  {
+    name: '109_immersive_home',
+    sql: `
+      -- 1. Multiple cover photos table
+      CREATE TABLE IF NOT EXISTS locket_covers (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        locket_id UUID NOT NULL REFERENCES lockets(id) ON DELETE CASCADE,
+        photo_url TEXT NOT NULL,
+        storage_key TEXT,
+        sort_order INTEGER DEFAULT 0,
+        added_by_firebase_uid VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      -- Indexes for efficient querying
+      CREATE INDEX IF NOT EXISTS idx_locket_covers_locket ON locket_covers(locket_id);
+      CREATE INDEX IF NOT EXISTS idx_locket_covers_order ON locket_covers(locket_id, sort_order);
+
+      -- Enable RLS
+      ALTER TABLE locket_covers ENABLE ROW LEVEL SECURITY;
+
+      -- RLS Policies for locket_covers
+      DROP POLICY IF EXISTS locket_covers_select_policy ON locket_covers;
+      CREATE POLICY locket_covers_select_policy ON locket_covers
+          FOR SELECT USING (true);
+
+      DROP POLICY IF EXISTS locket_covers_insert_policy ON locket_covers;
+      CREATE POLICY locket_covers_insert_policy ON locket_covers
+          FOR INSERT WITH CHECK (true);
+
+      DROP POLICY IF EXISTS locket_covers_update_policy ON locket_covers;
+      CREATE POLICY locket_covers_update_policy ON locket_covers
+          FOR UPDATE USING (true);
+
+      DROP POLICY IF EXISTS locket_covers_delete_policy ON locket_covers;
+      CREATE POLICY locket_covers_delete_policy ON locket_covers
+          FOR DELETE USING (true);
+
+      -- 2. Pinned memory for "Fridge" feature
+      ALTER TABLE lockets
+      ADD COLUMN IF NOT EXISTS pinned_memory_id UUID REFERENCES memory_groups(id) ON DELETE SET NULL;
+
+      COMMENT ON COLUMN lockets.pinned_memory_id IS 'Currently pinned memory shown in the Fridge widget';
+    `,
+  },
+  {
+    name: '110_add_anniversary_fields',
+    sql: `
+      -- Add anniversary and countdown fields to lockets table
+      ALTER TABLE lockets
+      ADD COLUMN IF NOT EXISTS anniversary_date TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS next_countdown_event_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS next_countdown_date TIMESTAMP WITH TIME ZONE;
+
+      COMMENT ON COLUMN lockets.anniversary_date IS 'The relationship anniversary date';
+      COMMENT ON COLUMN lockets.next_countdown_event_name IS 'Name of the next event to count down to';
+      COMMENT ON COLUMN lockets.next_countdown_date IS 'Date/time of the next countdown event';
+    `,
+  },
 ];
 
 // Check if migration has been run
