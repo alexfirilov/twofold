@@ -45,14 +45,14 @@ export async function generatePresignedUploadUrl(
     const timestamp = Date.now()
     const randomString = Math.random().toString(36).substring(2, 15)
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_')
-    
+
     const key = `media/${timestamp}-${randomString}-${sanitizedFilename}`
     const file = bucket.file(key)
 
     // Generate the presigned URL for uploading (V4)
     const [uploadUrl] = await file.getSignedUrl({
       version: 'v4',
-      action: 'write',
+      action: 'resumable',
       expires: Date.now() + 5 * 60 * 1000, // 5 minutes
       contentType: fileType,
     })
@@ -80,7 +80,7 @@ export async function generatePresignedDownloadUrl(key: string): Promise<string>
   try {
     const bucket = getBucket()
     const file = bucket.file(key)
-    
+
     // Generate the presigned URL (expires in 1 hour)
     const [downloadUrl] = await file.getSignedUrl({
       version: 'v4',
@@ -146,7 +146,7 @@ export function isValidFileType(mimeType: string): boolean {
     'video/mkv',
     'video/webm',
   ]
-  
+
   return allowedTypes.includes(mimeType.toLowerCase())
 }
 
@@ -155,7 +155,7 @@ export function isValidFileType(mimeType: string): boolean {
  */
 export function getMaxFileSize(mimeType: string): number {
   const fileCategory = getFileTypeCategory(mimeType)
-  
+
   switch (fileCategory) {
     case 'image':
       return 10 * 1024 * 1024 // 10MB for images
