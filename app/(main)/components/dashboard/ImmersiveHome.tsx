@@ -1,22 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { Plus, Loader2 } from 'lucide-react';
+import { Heart, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { HeroSection } from './HeroSection';
-import { WidgetCarousel } from './WidgetCarousel';
 import { SpotlightCard } from './SpotlightCard';
 import { PinnedNote } from './PinnedNote';
-import { DaysTogetherWidget } from './widgets/DaysTogetherWidget';
+import { WidgetCarousel } from './WidgetCarousel';
 import { BucketListWidget } from './widgets/BucketListWidget';
 import { CountdownWidget } from '@/(main)/profile/components/CountdownWidget';
-import { JournalCard } from '@/(main)/timeline/components/JournalCard';
-import { LoveNoteCard } from '@/(main)/timeline/components/LoveNoteCard';
 import { EditMemoryModal } from '@/(main)/timeline/components/EditMemoryModal';
 import { CommentsPanel } from '@/(main)/timeline/components/CommentsPanel';
 import { MemoryDetailModal } from '@/(main)/timeline/components/MemoryDetailModal';
-import type { Locket, LocketCover, MemoryGroup, MediaItem as MediaItemType } from '@/lib/types';
+import type { Locket, MemoryGroup, MediaItem as MediaItemType } from '@/lib/types';
 
 interface ImmersiveHomeProps {
   locket: Locket;
@@ -27,40 +23,11 @@ interface ImmersiveHomeProps {
 }
 
 export function ImmersiveHome({ locket, user }: ImmersiveHomeProps) {
-  const [coverPhotos, setCoverPhotos] = useState<LocketCover[]>([]);
-  const [loadingCovers, setLoadingCovers] = useState(true);
-
-  // Modal states
+  // Modal states (still used by SpotlightCard)
   const [editingMemory, setEditingMemory] = useState<MemoryGroup | null>(null);
   const [commentingMemory, setCommentingMemory] = useState<{ id: string; title: string } | null>(null);
   const [viewingMemory, setViewingMemory] = useState<MemoryGroup | null>(null);
   const [viewingMemoryLike, setViewingMemoryLike] = useState({ isLiked: false, likeCount: 0 });
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Fetch cover photos
-  useEffect(() => {
-    async function fetchCovers() {
-      try {
-        const { getCurrentUserToken } = await import('@/lib/firebase/auth');
-        const token = await getCurrentUserToken();
-
-        const res = await fetch(`/api/lockets/${locket.id}/covers`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setCoverPhotos(data.data || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch cover photos:', error);
-      } finally {
-        setLoadingCovers(false);
-      }
-    }
-
-    fetchCovers();
-  }, [locket.id]);
 
   // Calculate days together
   const daysTogether = locket.anniversary_date
@@ -81,9 +48,23 @@ export function ImmersiveHome({ locket, user }: ImmersiveHomeProps) {
 
   const countdownTitle = locket.next_countdown_event_name || (locket.anniversary_date ? 'Anniversary' : 'Next Milestone');
 
-  const handleEditSaved = () => {
-    setRefreshKey((prev) => prev + 1);
+  // Get greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
   };
+
+  const firstName = user.displayName?.split(' ')[0] || 'Love';
+
+  const formattedAnniversary = locket.anniversary_date
+    ? new Date(locket.anniversary_date).toLocaleDateString(undefined, {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    : null;
 
   const handleViewMemory = async (group: MemoryGroup) => {
     setViewingMemory(group);
@@ -131,108 +112,110 @@ export function ImmersiveHome({ locket, user }: ImmersiveHomeProps) {
   };
 
   return (
-    <div className="min-h-screen pb-20 md:pb-8 bg-background-light">
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 pt-0 md:pt-6 max-w-5xl">
-        <HeroSection
-          locketName={locket.name}
-          userName={user.displayName || undefined}
-          daysTogether={daysTogether}
-          locationOrigin={locket.location_origin}
-          coverPhotos={coverPhotos}
-          fallbackCoverUrl={locket.cover_photo_url}
-        />
-      </div>
+    <div className="min-h-screen bg-[#221016] pb-24 md:pb-8">
+      <div className="container mx-auto px-4 max-w-5xl">
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-6 max-w-5xl">
-        {/* Widget Carousel */}
+        {/* 1. Header: Greeting + Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between pt-6 pb-2"
+        >
+          <div>
+            <p className="text-white/50 text-sm font-medium">
+              {getGreeting()}, {firstName}
+            </p>
+            <h1 className="font-heading text-2xl md:text-3xl font-bold text-white leading-tight">
+              {locket.name}
+            </h1>
+          </div>
+          <Link
+            href="/settings"
+            className="p-2.5 bg-white/[0.07] backdrop-blur-md rounded-full hover:bg-white/[0.12] transition-colors border border-white/[0.08]"
+            aria-label="Locket settings"
+          >
+            <Settings className="w-4 h-4 text-white/70" />
+          </Link>
+        </motion.div>
+
+        {/* 2. Days Together Counter */}
+        {daysTogether !== null && daysTogether > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-6"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white/[0.07] backdrop-blur-md rounded-full px-4 py-2 border border-white/[0.08]">
+                <Heart className="w-3.5 h-3.5 text-primary fill-primary" />
+                <span className="font-heading font-bold text-white text-lg">
+                  {daysTogether.toLocaleString()}
+                </span>
+                <span className="text-white/50 text-sm">days together</span>
+              </div>
+              {formattedAnniversary && (
+                <span className="text-white/30 text-xs hidden sm:inline">
+                  since {formattedAnniversary}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* 3. Pinned Fridge (standalone, centered) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-8"
+          transition={{ delay: 0.2 }}
+          className="flex items-start justify-center py-4 mb-6"
+        >
+          <PinnedNote
+            locketId={locket.id}
+            partnerName="your partner"
+          />
+        </motion.div>
+
+        {/* 4. Spotlight / On This Day (full-width) */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mb-6"
+        >
+          <SpotlightCard locketId={locket.id} onViewMemory={handleViewMemory} />
+        </motion.div>
+
+        {/* 5. Widget Carousel (Countdown + BucketList) */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="mb-6"
         >
           <WidgetCarousel>
-            {/* Days Together Widget */}
-            {daysTogether !== null && daysTogether > 0 && locket.anniversary_date && (
-              <DaysTogetherWidget
-                daysTogether={daysTogether}
-                anniversaryDate={new Date(locket.anniversary_date)}
-                locationOrigin={locket.location_origin}
-              />
-            )}
-
-            {/* Countdown Widget */}
             {targetDate ? (
               <CountdownWidget targetDate={targetDate} title={countdownTitle} />
             ) : (
-              <div className="bg-gradient-to-br from-primary to-rose-600 rounded-2xl shadow-lg p-6 text-white relative overflow-hidden flex flex-col items-center text-center justify-center min-h-[200px]">
+              <div className="bg-gradient-to-br from-primary/30 to-primary/10 backdrop-blur-xl rounded-2xl p-6 text-white relative overflow-hidden flex flex-col items-center text-center justify-center min-h-[180px] border border-white/[0.08]">
                 <p className="font-heading text-xl mb-2">Set a Date</p>
-                <p className="text-rose-100 text-sm mb-4">
+                <p className="text-white/60 text-sm mb-4">
                   Add your anniversary or next trip to see a countdown here.
                 </p>
                 <Link
                   href="/settings"
-                  className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full text-sm font-bold transition-colors"
+                  className="bg-white/15 hover:bg-white/25 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-bold transition-colors border border-white/10"
                 >
                   Configure Locket
                 </Link>
               </div>
             )}
-
-            {/* Bucket List Widget */}
             <BucketListWidget locketId={locket.id} />
           </WidgetCarousel>
         </motion.div>
-
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column - Spotlight & Fridge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="lg:col-span-5 space-y-6"
-          >
-            {/* Spotlight Card */}
-            <SpotlightCard locketId={locket.id} onViewMemory={handleViewMemory} />
-
-            {/* Pinned Note (Fridge) */}
-            <PinnedNote
-              locketId={locket.id}
-              partnerName="your partner"
-              onViewMemory={handleViewMemory}
-            />
-          </motion.div>
-
-          {/* Right Column - Recent Memories */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="lg:col-span-7"
-          >
-            <RecentMemories
-              key={refreshKey}
-              locketId={locket.id}
-              onEdit={setEditingMemory}
-              onComment={(id, title) => setCommentingMemory({ id, title })}
-              onView={handleViewMemory}
-            />
-          </motion.div>
-        </div>
-
-        {/* Floating Add Button (Mobile) */}
-        <Link
-          href="/upload"
-          className="md:hidden fixed bottom-20 right-4 z-50 bg-primary text-primary-foreground w-14 h-14 rounded-full shadow-lg flex items-center justify-center animate-in zoom-in duration-300"
-        >
-          <Plus size={24} />
-        </Link>
       </div>
 
-      {/* Modals */}
+      {/* Modals (used by SpotlightCard) */}
       {editingMemory && (
         <EditMemoryModal
           isOpen={true}
@@ -250,7 +233,7 @@ export function ImmersiveHome({ locket, user }: ImmersiveHomeProps) {
             date_taken: m.date_taken ? String(m.date_taken) : undefined,
             place_name: m.place_name
           }))}
-          onSaved={handleEditSaved}
+          onSaved={() => {}}
         />
       )}
 
@@ -292,117 +275,6 @@ export function ImmersiveHome({ locket, user }: ImmersiveHomeProps) {
           }}
         />
       )}
-    </div>
-  );
-}
-
-// Recent Memories Component
-interface RecentMemoriesProps {
-  locketId: string;
-  onEdit: (group: MemoryGroup) => void;
-  onComment: (id: string, title: string) => void;
-  onView: (group: MemoryGroup) => void;
-}
-
-function RecentMemories({ locketId, onEdit, onComment, onView }: RecentMemoriesProps) {
-  const [memories, setMemories] = useState<MemoryGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchMemories() {
-      try {
-        const { getCurrentUserToken } = await import('@/lib/firebase/auth');
-        const token = await getCurrentUserToken();
-
-        const res = await fetch(`/api/memory-groups?locketId=${locketId}&limit=5`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setMemories(data.memoryGroups || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch memories', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchMemories();
-  }, [locketId]);
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="animate-spin text-primary/50" />
-      </div>
-    );
-  }
-
-  if (memories.length === 0) {
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-heading text-xl md:text-2xl text-truffle">Recent Memories</h2>
-        </div>
-        <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-rose-200">
-          <p className="text-muted-foreground mb-4">No memories yet.</p>
-          <Link href="/upload" className="text-primary font-medium hover:underline">
-            Start adding some!
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading text-xl md:text-2xl text-truffle">Recent Memories</h2>
-        <Link href="/timeline" className="text-sm text-primary font-medium hover:underline">
-          View Timeline
-        </Link>
-      </div>
-
-      <div className="space-y-4">
-        {memories.map((group) => {
-          const hasMedia = group.media_items && group.media_items.length > 0;
-          const creatorInitial = group.creator_name?.charAt(0).toUpperCase() || '?';
-
-          if (!hasMedia) {
-            return (
-              <div key={group.id}>
-                <LoveNoteCard
-                  date={new Date(group.created_at).toLocaleDateString()}
-                  note={group.description || group.title || 'A sweet note'}
-                  authorInitial={creatorInitial}
-                  authorAvatarUrl={group.creator_avatar_url}
-                  className="w-full max-w-full"
-                />
-              </div>
-            );
-          }
-
-          return (
-            <div key={group.id}>
-              <JournalCard
-                id={group.id}
-                date={new Date(group.date_taken || group.created_at).toLocaleDateString()}
-                location={group.media_items?.[0]?.place_name || undefined}
-                imageUrl={group.media_items?.[0]?.storage_url}
-                caption={group.title || group.description || ''}
-                likes={0}
-                mediaItems={group.media_items}
-                className="w-full max-w-full"
-                onEdit={() => onEdit(group)}
-                onComment={() => onComment(group.id, group.title || 'Memory')}
-                onImageClick={() => onView(group)}
-              />
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

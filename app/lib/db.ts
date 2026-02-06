@@ -146,7 +146,7 @@ export async function createMemoryGroup(groupData: CreateMemoryGroup): Promise<M
 /**
  * Get all memory groups with their media items
  */
-export async function getAllMemoryGroups(cornerId?: string, includeMedia = true): Promise<MemoryGroup[]> {
+export async function getAllMemoryGroups(cornerId?: string, includeMedia = true, excludeMemoryId?: string | null): Promise<MemoryGroup[]> {
   try {
     const conditions = []
     const params = []
@@ -155,6 +155,12 @@ export async function getAllMemoryGroups(cornerId?: string, includeMedia = true)
     if (cornerId) {
       conditions.push(`mg.locket_id = $${paramIndex}`)
       params.push(cornerId)
+      paramIndex++
+    }
+
+    if (excludeMemoryId) {
+      conditions.push(`mg.id != $${paramIndex}`)
+      params.push(excludeMemoryId)
       paramIndex++
     }
 

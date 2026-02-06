@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCornerAccess } from '@/lib/firebase/serverAuth'
 import { pinMemory, unpinMemory, getPinnedMemory } from '@/lib/db'
+import { generatePresignedDownloadUrl } from '@/lib/gcs'
 
 interface RouteParams {
   params: { id: string }
@@ -24,6 +25,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const pinnedMemory = await getPinnedMemory(locketId)
+
+    if (pinnedMemory?.media_items && Array.isArray(pinnedMemory.media_items)) {
+      for (const media of pinnedMemory.media_items) {
+        if (media.storage_key) {
+          try {
+            media.storage_url = await generatePresignedDownloadUrl(media.storage_key)
+          } catch (e) {
+            console.error('Failed to generate signed URL for', media.storage_key, e)
+          }
+        }
+      }
+    }
 
     return NextResponse.json(
       { success: true, data: pinnedMemory },

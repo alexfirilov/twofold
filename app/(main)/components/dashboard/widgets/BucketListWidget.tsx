@@ -110,12 +110,12 @@ export function BucketListWidget({ locketId }: BucketListWidgetProps) {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#FDF6F7] to-white rounded-2xl p-5 border border-rose-100/50 relative overflow-hidden h-full">
+    <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-5 border border-white/[0.08] relative overflow-hidden h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-gold" />
-          <h3 className="font-heading text-lg font-bold text-truffle">Bucket List</h3>
+          <h3 className="font-heading text-lg font-bold text-white">Bucket List</h3>
         </div>
         <Link
           href="/lists"
@@ -132,7 +132,6 @@ export function BucketListWidget({ locketId }: BucketListWidgetProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Items List */}
           <AnimatePresence mode="popLayout">
             {items.map((item) => (
               <motion.div
@@ -144,25 +143,23 @@ export function BucketListWidget({ locketId }: BucketListWidgetProps) {
               >
                 <button
                   onClick={() => handleToggleComplete(item.id)}
-                  className="mt-0.5 w-5 h-5 rounded border-2 border-rose-200 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors flex-shrink-0 group-hover:border-primary/50"
+                  className="mt-0.5 w-5 h-5 rounded border-2 border-white/20 flex items-center justify-center hover:border-primary hover:bg-primary/10 transition-colors flex-shrink-0 group-hover:border-primary/50"
                   aria-label="Mark as completed"
                 >
                   <Check className="w-3 h-3 text-transparent group-hover:text-primary/30" />
                 </button>
-                <span className="text-sm text-truffle/80 leading-tight">{item.title}</span>
+                <span className="text-sm text-white/70 leading-tight">{item.title}</span>
               </motion.div>
             ))}
           </AnimatePresence>
 
-          {/* Empty State */}
           {items.length === 0 && !loading && (
-            <p className="text-sm text-muted-foreground text-center py-2">
+            <p className="text-sm text-white/40 text-center py-2">
               No dreams added yet
             </p>
           )}
 
-          {/* Quick Add Form */}
-          <form onSubmit={handleAddDream} className="mt-3 pt-3 border-t border-rose-100/50">
+          <form onSubmit={handleAddDream} className="mt-3 pt-3 border-t border-white/[0.08]">
             <div className="flex items-center gap-2">
               <div className="flex-1 relative">
                 <input
@@ -170,14 +167,14 @@ export function BucketListWidget({ locketId }: BucketListWidgetProps) {
                   value={newDream}
                   onChange={(e) => setNewDream(e.target.value)}
                   placeholder="Add a dream..."
-                  className="w-full text-sm px-3 py-2 rounded-lg bg-white/80 border border-rose-100 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 placeholder:text-muted-foreground/50"
+                  className="w-full text-sm px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 placeholder:text-white/30"
                   disabled={addingDream}
                 />
               </div>
               <button
                 type="submit"
                 disabled={!newDream.trim() || addingDream}
-                className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {addingDream ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

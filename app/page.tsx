@@ -43,10 +43,10 @@ export default function HomePage() {
         // Still loading locket data
         if (locketLoading) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-background-light">
+                <div className="min-h-screen flex items-center justify-center bg-[#221016]">
                     <div className="text-center">
                         <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
-                        <p className="text-muted-foreground">Loading your locket...</p>
+                        <p className="text-white/60">Loading your locket...</p>
                     </div>
                 </div>
             );
@@ -56,10 +56,10 @@ export default function HomePage() {
         if (!currentLocket && userLockets.length === 0) {
             router.replace('/locket-create');
             return (
-                <div className="min-h-screen flex items-center justify-center bg-background-light">
+                <div className="min-h-screen flex items-center justify-center bg-[#221016]">
                     <div className="text-center">
                         <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
-                        <p className="text-muted-foreground">Setting up your locket...</p>
+                        <p className="text-white/60">Setting up your locket...</p>
                     </div>
                 </div>
             );
@@ -67,10 +67,9 @@ export default function HomePage() {
 
         // User has a locket - show Dashboard with Navigation
         return (
-            <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">
+            <div className="min-h-screen bg-[#221016] text-white flex flex-col md:flex-row">
                 <Navigation />
                 <main className="flex-1 pb-20 md:pb-0 md:pl-64 min-h-screen relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-rose-50/50 to-white/50 pointer-events-none -z-10" />
                     <Dashboard />
                 </main>
             </div>

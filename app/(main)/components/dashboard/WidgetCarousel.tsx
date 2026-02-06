@@ -25,7 +25,7 @@ export function WidgetCarousel({ children }: WidgetCarouselProps) {
       {/* Scroll Buttons (Desktop) */}
       <button
         onClick={() => scroll('left')}
-        className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-lg border border-rose-100 text-truffle hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100 group-hover:-translate-x-1"
+        className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white/10 backdrop-blur-md shadow-lg border border-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all opacity-0 group-hover:opacity-100 group-hover:-translate-x-1"
         aria-label="Scroll left"
       >
         <ChevronLeft className="w-5 h-5" />
@@ -33,7 +33,7 @@ export function WidgetCarousel({ children }: WidgetCarouselProps) {
 
       <button
         onClick={() => scroll('right')}
-        className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-lg border border-rose-100 text-truffle hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
+        className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white/10 backdrop-blur-md shadow-lg border border-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
         aria-label="Scroll right"
       >
         <ChevronRight className="w-5 h-5" />
@@ -42,12 +42,12 @@ export function WidgetCarousel({ children }: WidgetCarouselProps) {
       {/* Scrollable Container */}
       <div
         ref={scrollContainerRef}
-        className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scroll-smooth no-scrollbar"
+        className="flex overflow-x-auto gap-3 pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scroll-smooth no-scrollbar"
       >
         {React.Children.map(children, (child, index) => (
           <div
             key={index}
-            className="min-w-[85%] md:min-w-[280px] lg:min-w-[300px] snap-center flex-shrink-0"
+            className="min-w-[75%] sm:min-w-[60%] md:min-w-[calc(33.333%-8px)] snap-start flex-shrink-0"
           >
             {child}
           </div>

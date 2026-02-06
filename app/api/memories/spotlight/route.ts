@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCornerAccess } from '@/lib/firebase/serverAuth'
 import { getSpotlightMemory } from '@/lib/db'
+import { generatePresignedDownloadUrl } from '@/lib/gcs'
 
 /**
  * GET /api/memories/spotlight?locketId=xxx - Get spotlight memory (On This Day or random)
@@ -28,6 +29,18 @@ export async function GET(request: NextRequest) {
     }
 
     const spotlight = await getSpotlightMemory(locketId)
+
+    if (spotlight?.memory?.media_items && Array.isArray(spotlight.memory.media_items)) {
+      for (const media of spotlight.memory.media_items) {
+        if (media.storage_key) {
+          try {
+            media.storage_url = await generatePresignedDownloadUrl(media.storage_key)
+          } catch (e) {
+            console.error('Failed to generate signed URL for', media.storage_key, e)
+          }
+        }
+      }
+    }
 
     return NextResponse.json(
       { success: true, data: spotlight },

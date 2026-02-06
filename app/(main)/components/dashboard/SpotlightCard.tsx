@@ -41,7 +41,7 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-rose-100 min-h-[200px] flex items-center justify-center">
+      <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-5 border border-white/[0.08] min-h-[200px] flex items-center justify-center">
         <Loader2 className="w-5 h-5 animate-spin text-primary/50" />
       </div>
     );
@@ -49,18 +49,18 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
 
   if (!spotlight || spotlight.type === 'none' || !spotlight.memory) {
     return (
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-rose-100">
+      <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-5 border border-white/[0.08]">
         <div className="flex items-center gap-2 mb-3">
           <Calendar className="w-4 h-4 text-primary" />
-          <h3 className="font-heading text-lg font-bold text-truffle">On This Day</h3>
+          <h3 className="font-heading text-lg font-bold text-white">On This Day</h3>
         </div>
-        <div className="bg-rose-50/50 rounded-xl p-4 text-center py-8 border border-rose-50">
-          <Clock className="w-8 h-8 mx-auto text-primary/20 mb-3" />
-          <p className="text-muted-foreground text-sm">
-            No memories from previous years today.
+        <div className="bg-white/[0.04] rounded-xl p-4 text-center py-8 border border-white/[0.05]">
+          <Clock className="w-8 h-8 mx-auto text-white/15 mb-3" />
+          <p className="text-white/40 text-sm">
+            Your memories will appear here — both &ldquo;On This Day&rdquo; flashbacks and random highlights.
           </p>
-          <p className="text-xs text-muted-foreground/70 mt-1">
-            Keep adding memories to see them here!
+          <p className="text-xs text-white/25 mt-1">
+            Keep adding memories to unlock spotlights!
           </p>
         </div>
       </div>
@@ -77,7 +77,7 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 0.2, type: 'spring', stiffness: 100 }}
-      className="bg-white rounded-2xl shadow-sm border border-rose-100 overflow-hidden group"
+      className="bg-white/[0.07] backdrop-blur-xl rounded-2xl border border-white/[0.08] overflow-hidden group"
     >
       {/* Header */}
       <div className="p-4 pb-3 flex items-center justify-between">
@@ -85,22 +85,21 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
           {isOnThisDay ? (
             <>
               <Calendar className="w-4 h-4 text-primary" />
-              <h3 className="font-heading text-lg font-bold text-truffle">On This Day</h3>
+              <h3 className="font-heading text-lg font-bold text-white">On This Day</h3>
             </>
           ) : (
             <>
               <Sparkles className="w-4 h-4 text-gold" />
-              <h3 className="font-heading text-lg font-bold text-truffle">Memory Spotlight</h3>
+              <h3 className="font-heading text-lg font-bold text-white">Memory Spotlight</h3>
             </>
           )}
         </div>
 
-        {/* Years Ago Badge */}
         {isOnThisDay && spotlight.years_ago && (
           <motion.span
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="inline-flex items-center gap-1 bg-gold/10 text-gold px-2.5 py-1 rounded-full text-xs font-bold"
+            className="inline-flex items-center gap-1 bg-gold/20 text-gold px-2.5 py-1 rounded-full text-xs font-bold"
           >
             {spotlight.years_ago} {spotlight.years_ago === 1 ? 'year' : 'years'} ago
           </motion.span>
@@ -120,8 +119,7 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
-            {/* Glass morphism overlay at bottom */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent p-4 pt-12">
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4 pt-12">
               {memory.title && (
                 <h4 className="font-heading text-white font-bold text-lg leading-tight mb-1">
                   {memory.title}
@@ -136,17 +134,17 @@ export function SpotlightCard({ locketId, onViewMemory }: SpotlightCardProps) {
           </div>
         ) : (
           <div className="p-4 pt-0">
-            <div className="bg-gradient-to-br from-rose-50 to-white rounded-xl p-5 border border-rose-100/50">
-              <p className="font-serif text-truffle/80 italic text-center leading-relaxed">
-                "{memory.description || memory.title || 'A cherished moment'}"
+            <div className="bg-gradient-to-br from-white/[0.06] to-white/[0.02] rounded-xl p-5 border border-white/[0.05]">
+              <p className="font-serif text-white/70 italic text-center leading-relaxed">
+                &ldquo;{memory.description || memory.title || 'A cherished moment'}&rdquo;
               </p>
             </div>
           </div>
         )}
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-rose-50 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
+        <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between">
+          <span className="text-xs text-white/40">
             {new Date(memory.date_taken || memory.created_at).toLocaleDateString(undefined, {
               month: 'long',
               day: 'numeric',

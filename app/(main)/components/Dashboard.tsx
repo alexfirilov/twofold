@@ -13,7 +13,7 @@ export default function Dashboard() {
 
     if (locketLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background-light">
+            <div className="min-h-screen flex items-center justify-center bg-[#221016]">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
         );
@@ -21,22 +21,22 @@ export default function Dashboard() {
 
     if (!currentLocket) {
         return (
-            <div className="min-h-screen pb-20 md:pb-8 bg-background-light flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen pb-20 md:pb-8 bg-[#221016] flex flex-col items-center justify-center p-4">
                 <div className="max-w-md text-center">
                     {/* Welcome Animation */}
                     <div className="w-24 h-24 mx-auto mb-6 relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-rose-200 rounded-full animate-pulse" />
-                        <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-primary/10 rounded-full animate-pulse" />
+                        <div className="absolute inset-2 bg-[#2a161e] rounded-full flex items-center justify-center border border-white/[0.08]">
                             <div className="flex -space-x-2">
-                                <div className="w-8 h-8 rounded-full bg-rose-200 border-2 border-white" />
-                                <div className="w-8 h-8 rounded-full bg-indigo-200 border-2 border-white" />
+                                <div className="w-8 h-8 rounded-full bg-primary/30 border-2 border-[#2a161e]" />
+                                <div className="w-8 h-8 rounded-full bg-gold/30 border-2 border-[#2a161e]" />
                             </div>
                         </div>
                     </div>
 
-                    <h1 className="font-heading text-3xl text-primary mb-2">Welcome to Twofold</h1>
-                    <p className="text-lg text-truffle mb-1">Hey, {user?.displayName?.split(' ')[0] || 'there'}!</p>
-                    <p className="text-muted-foreground mb-8">
+                    <h1 className="font-heading text-3xl text-white mb-2">Welcome to Twofold</h1>
+                    <p className="text-lg text-white/60 mb-1">Hey, {user?.displayName?.split(' ')[0] || 'there'}!</p>
+                    <p className="text-white/40 mb-8">
                         Your digital locket awaits. Create one to start capturing your story together.
                     </p>
 
@@ -50,14 +50,14 @@ export default function Dashboard() {
 
                         <div className="relative">
                             <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-rose-100" />
+                                <div className="w-full border-t border-white/[0.08]" />
                             </div>
                             <div className="relative flex justify-center">
-                                <span className="bg-background-light px-4 text-sm text-muted-foreground">or</span>
+                                <span className="bg-[#221016] px-4 text-sm text-white/40">or</span>
                             </div>
                         </div>
 
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-white/30">
                             Have an invite code? Enter it on the invite page or ask your partner to share their link.
                         </p>
                     </div>

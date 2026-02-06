@@ -4,7 +4,23 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocket } from '../contexts/LocketContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Loader2, ArrowLeft, ArrowRight, Check, Move, ZoomIn, ZoomOut } from 'lucide-react'
+import { Loader2, ArrowLeft, ArrowRight, Check, Move, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addMonths,
+  subMonths,
+  eachDayOfInterval,
+  format,
+  isSameMonth,
+  isSameDay,
+  getYear,
+  getMonth,
+  setYear,
+  setMonth,
+} from 'date-fns'
 import {
   Dialog,
   DialogContent,
@@ -40,11 +56,13 @@ export default function LocketCreator() {
 
   // Step 2: Locket Details
   const [locketName, setLocketName] = useState('Our Locket')
-  const [anniversaryMonth, setAnniversaryMonth] = useState('')
-  const [anniversaryYear, setAnniversaryYear] = useState('')
-  const [anniversaryDay, setAnniversaryDay] = useState('')
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [exactDayUnknown, setExactDayUnknown] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [calendarViewDate, setCalendarViewDate] = useState(new Date())
+  const [showYearPicker, setShowYearPicker] = useState(false)
   const [locationOrigin, setLocationOrigin] = useState('')
+  const calendarRef = useRef<HTMLDivElement>(null)
 
   // Places autocomplete state
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
@@ -82,38 +100,38 @@ export default function LocketCreator() {
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, TOTAL_STEPS))
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
-  // Generate years for dropdown (100 years back)
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 100 }, (_, i) => currentYear - i)
-  const months = [
-    { value: '01', label: 'January' },
-    { value: '02', label: 'February' },
-    { value: '03', label: 'March' },
-    { value: '04', label: 'April' },
-    { value: '05', label: 'May' },
-    { value: '06', label: 'June' },
-    { value: '07', label: 'July' },
-    { value: '08', label: 'August' },
-    { value: '09', label: 'September' },
-    { value: '10', label: 'October' },
-    { value: '11', label: 'November' },
-    { value: '12', label: 'December' },
-  ]
-
-  // Get days in selected month
-  const getDaysInMonth = () => {
-    if (!anniversaryMonth || !anniversaryYear) return 31
-    return new Date(parseInt(anniversaryYear), parseInt(anniversaryMonth), 0).getDate()
-  }
-
-  const days = Array.from({ length: getDaysInMonth() }, (_, i) => i + 1)
-
   // Format anniversary date for API
   const getFormattedAnniversaryDate = () => {
-    if (!anniversaryMonth || !anniversaryYear) return undefined
-    const day = exactDayUnknown ? '01' : anniversaryDay.padStart(2, '0')
-    return `${anniversaryYear}-${anniversaryMonth}-${day}`
+    if (!selectedDate) return undefined
+    if (exactDayUnknown) {
+      return format(selectedDate, 'yyyy-MM') + '-01'
+    }
+    return format(selectedDate, 'yyyy-MM-dd')
   }
+
+  // Close calendar when clicking outside
+  useEffect(() => {
+    const handleClickOutsideCal = (e: MouseEvent) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
+        setCalendarOpen(false)
+        setShowYearPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutsideCal)
+    return () => document.removeEventListener('mousedown', handleClickOutsideCal)
+  }, [])
+
+  // Calendar year list
+  const calendarYears = Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i)
+
+  // Calendar grid
+  const calendarDays = (() => {
+    const monthStart = startOfMonth(calendarViewDate)
+    const monthEnd = endOfMonth(calendarViewDate)
+    const start = startOfWeek(monthStart)
+    const end = endOfWeek(monthEnd)
+    return eachDayOfInterval({ start, end })
+  })()
 
   // Places autocomplete
   const fetchSuggestions = useCallback(async (input: string) => {
@@ -486,9 +504,18 @@ export default function LocketCreator() {
         <label htmlFor="avatar-upload" className="cursor-pointer">
           <div className="relative h-28 w-28 rounded-full border-2 border-dashed border-white/20 hover:border-[#C8A659]/50 transition-colors duration-300 flex items-center justify-center bg-[#331922] overflow-hidden">
             {avatarPreview ? (
-              <img src={avatarPreview} alt="Profile" className="absolute inset-0 w-full h-full object-cover" />
+              <img
+                src={avatarPreview}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={() => setAvatarPreview(null)}
+              />
+            ) : nickname ? (
+              <span className="text-4xl font-bold text-white/40 group-hover:text-white/60 transition-colors select-none">
+                {nickname.charAt(0).toUpperCase()}
+              </span>
             ) : (
-              <span className="material-symbols-outlined text-white/20 text-4xl group-hover:text-white/40 transition-colors">add_a_photo</span>
+              <span className="material-symbols-outlined text-white/20 text-4xl group-hover:text-white/40 transition-colors">person</span>
             )}
             <input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={handleAvatarChange} ref={avatarInputRef} />
           </div>
@@ -548,65 +575,154 @@ export default function LocketCreator() {
           />
         </div>
 
-        {/* Anniversary Date - Custom Month/Year/Day Selectors */}
-        <div className="space-y-2">
-          <label className="text-white/60 text-sm flex items-center gap-2">
-            <span className="material-symbols-outlined text-lg">event</span>
+        {/* Anniversary Date - Calendar Dropdown */}
+        <div className="relative" ref={calendarRef}>
+          <label className="text-white/60 text-sm flex items-center gap-2 mb-2">
+            <CalendarDays className="w-4 h-4" />
             When did it start?
           </label>
-          <div className="flex gap-2">
-            {/* Month */}
-            <select
-              value={anniversaryMonth}
-              onChange={(e) => setAnniversaryMonth(e.target.value)}
-              className="flex-1 bg-[#331922] border border-[#673244] rounded-lg py-3 px-3 text-white focus:outline-none focus:border-[#C8A659] transition-colors [color-scheme:dark] cursor-pointer"
-            >
-              <option value="" className="bg-[#331922]">Month</option>
-              {months.map(m => (
-                <option key={m.value} value={m.value} className="bg-[#331922]">{m.label}</option>
-              ))}
-            </select>
+          <button
+            type="button"
+            onClick={() => {
+              setCalendarOpen(!calendarOpen)
+              setShowYearPicker(false)
+              if (selectedDate) setCalendarViewDate(selectedDate)
+            }}
+            className="w-full flex items-center gap-3 bg-[#331922] border border-[#673244] rounded-lg py-3 px-4 text-left hover:border-[#C8A659]/50 focus:border-[#C8A659] focus:outline-none transition-colors"
+          >
+            <CalendarDays className="w-4 h-4 text-white/40 flex-shrink-0" />
+            <span className={selectedDate ? 'text-white' : 'text-white/30'}>
+              {selectedDate
+                ? exactDayUnknown
+                  ? format(selectedDate, 'MMMM yyyy')
+                  : format(selectedDate, 'MMMM d, yyyy')
+                : 'Select a date'}
+            </span>
+          </button>
 
-            {/* Day */}
-            {!exactDayUnknown && (
-              <select
-                value={anniversaryDay}
-                onChange={(e) => setAnniversaryDay(e.target.value)}
-                className="w-20 bg-[#331922] border border-[#673244] rounded-lg py-3 px-3 text-white focus:outline-none focus:border-[#C8A659] transition-colors [color-scheme:dark] cursor-pointer"
-              >
-                <option value="" className="bg-[#331922]">Day</option>
-                {days.map(d => (
-                  <option key={d} value={String(d)} className="bg-[#331922]">{d}</option>
-                ))}
-              </select>
-            )}
+          {/* Calendar Dropdown */}
+          {calendarOpen && (
+            <div className="absolute z-50 mt-2 w-full bg-[#2a161e] border border-[#673244] rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              {showYearPicker ? (
+                /* Year picker grid */
+                <div className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowYearPicker(false)}
+                    className="flex items-center gap-1 text-xs text-white/60 hover:text-white mb-2 transition-colors"
+                  >
+                    <ChevronLeft className="w-3 h-3" /> Back to calendar
+                  </button>
+                  <div className="grid grid-cols-4 gap-1 max-h-[240px] overflow-y-auto">
+                    {calendarYears.map(y => (
+                      <button
+                        key={y}
+                        type="button"
+                        onClick={() => {
+                          setCalendarViewDate(setYear(calendarViewDate, y))
+                          setShowYearPicker(false)
+                        }}
+                        className={`py-2 rounded-lg text-sm transition-colors ${
+                          getYear(calendarViewDate) === y
+                            ? 'bg-primary text-white font-bold'
+                            : 'text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Month/Year header */}
+                  <div className="flex items-center justify-between p-3 border-b border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setCalendarViewDate(subMonths(calendarViewDate, 1))}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowYearPicker(true)}
+                      className="text-sm font-bold text-white hover:text-[#C8A659] transition-colors"
+                    >
+                      {format(calendarViewDate, 'MMMM yyyy')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarViewDate(addMonths(calendarViewDate, 1))}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
 
-            {/* Year */}
-            <select
-              value={anniversaryYear}
-              onChange={(e) => setAnniversaryYear(e.target.value)}
-              className="w-24 bg-[#331922] border border-[#673244] rounded-lg py-3 px-3 text-white focus:outline-none focus:border-[#C8A659] transition-colors [color-scheme:dark] cursor-pointer"
-            >
-              <option value="" className="bg-[#331922]">Year</option>
-              {years.map(y => (
-                <option key={y} value={String(y)} className="bg-[#331922]">{y}</option>
-              ))}
-            </select>
-          </div>
+                  {/* Day headers */}
+                  <div className="grid grid-cols-7 px-3 pt-2">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                      <div key={d} className="text-center text-[10px] font-medium text-white/30 py-1">{d}</div>
+                    ))}
+                  </div>
 
-          {/* Exact day unknown checkbox */}
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={exactDayUnknown}
-              onChange={(e) => {
-                setExactDayUnknown(e.target.checked)
-                if (e.target.checked) setAnniversaryDay('')
-              }}
-              className="w-4 h-4 rounded border-[#673244] bg-[#331922] text-primary focus:ring-primary/30 cursor-pointer"
-            />
-            <span className="text-white/40 text-xs group-hover:text-white/60 transition-colors">I don't remember the exact day</span>
-          </label>
+                  {/* Day grid */}
+                  <div className="grid grid-cols-7 px-3 pb-2">
+                    {calendarDays.map((day, i) => {
+                      const inMonth = isSameMonth(day, calendarViewDate)
+                      const isSelected = selectedDate && isSameDay(day, selectedDate)
+                      const isToday = isSameDay(day, new Date())
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          disabled={!inMonth}
+                          onClick={() => {
+                            setSelectedDate(day)
+                            if (!exactDayUnknown) setCalendarOpen(false)
+                          }}
+                          className={`h-9 w-full rounded-lg text-sm transition-colors ${
+                            !inMonth
+                              ? 'text-white/10 cursor-default'
+                              : isSelected
+                                ? 'bg-primary text-white font-bold'
+                                : isToday
+                                  ? 'text-[#C8A659] font-medium hover:bg-white/10'
+                                  : 'text-white/70 hover:bg-white/10'
+                          }`}
+                        >
+                          {format(day, 'd')}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* "Don't know exact date" toggle */}
+                  <div className="px-3 pb-3 pt-1 border-t border-white/5">
+                    <label className="flex items-center gap-2 cursor-pointer group py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={exactDayUnknown}
+                        onChange={(e) => {
+                          setExactDayUnknown(e.target.checked)
+                          if (e.target.checked && !selectedDate) {
+                            // Set to 1st of the viewed month so user has a month/year
+                            setSelectedDate(startOfMonth(calendarViewDate))
+                          }
+                          if (e.target.checked) setCalendarOpen(false)
+                        }}
+                        className="w-4 h-4 rounded border-[#673244] bg-[#331922] text-primary focus:ring-primary/30 cursor-pointer"
+                      />
+                      <span className="text-white/50 text-xs group-hover:text-white/70 transition-colors">
+                        I don&apos;t know the exact date
+                      </span>
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Location Origin with Autocomplete */}
@@ -955,25 +1071,27 @@ export default function LocketCreator() {
                 Send this link to your partner so they can join your locket.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex items-center space-x-2 mt-4">
-              <div className="flex-1 bg-[#331922] border border-[#673244] rounded-lg px-4 py-3">
-                <p className="text-sm text-white truncate font-mono">{inviteLink}</p>
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 bg-[#331922] border border-[#673244] rounded-lg px-4 py-3">
+                  <p className="text-sm text-white truncate font-mono">{inviteLink}</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="shrink-0 bg-[#331922] border-[#673244] hover:bg-[#4a2431] text-white"
+                  variant="outline"
+                >
+                  {copied ? (
+                    <span className="material-symbols-outlined text-green-400">check</span>
+                  ) : (
+                    <span className="material-symbols-outlined">content_copy</span>
+                  )}
+                </Button>
               </div>
-              <Button
-                type="button"
-                onClick={handleCopyLink}
-                className="shrink-0 bg-[#331922] border-[#673244] hover:bg-[#4a2431] text-white"
-                variant="outline"
-              >
-                {copied ? (
-                  <span className="material-symbols-outlined text-green-400">check</span>
-                ) : (
-                  <span className="material-symbols-outlined">content_copy</span>
-                )}
-              </Button>
             </div>
-            <DialogFooter className="mt-6">
-              <Button onClick={handleCloseModal} className="w-full sm:w-auto bg-primary hover:bg-[#a03d58]">
+            <DialogFooter className="mt-4">
+              <Button onClick={handleCloseModal} className="w-full bg-primary hover:bg-[#a03d58]">
                 Continue to Locket
               </Button>
             </DialogFooter>

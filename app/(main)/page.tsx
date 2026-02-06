@@ -32,7 +32,7 @@ export default function HomePage() {
   // Show loading while auth or locket context is loading
   if (authLoading || locketLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+      <div className="min-h-screen flex items-center justify-center bg-[#221016]">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
       </div>
     )
@@ -41,7 +41,7 @@ export default function HomePage() {
   // Not authenticated - will redirect
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+      <div className="min-h-screen flex items-center justify-center bg-[#221016]">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
       </div>
     )
@@ -50,7 +50,7 @@ export default function HomePage() {
   // No locket - will redirect to locket creation
   if (!currentLocket && userLockets.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+      <div className="min-h-screen flex items-center justify-center bg-[#221016]">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
       </div>
     )
